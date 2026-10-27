@@ -63,7 +63,7 @@ function formatDuration(seconds){
   const m=Math.round(seconds/60);return m>=60?Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min':m+' min';
 }
 function renderStrava(){
-  const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>x.date>='2026-05-25');
+  const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
   const yearSelect=document.getElementById('stravaYear');
   if(!yearSelect)return;
   const selected=yearSelect.value;
