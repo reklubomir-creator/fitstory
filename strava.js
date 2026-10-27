@@ -64,7 +64,7 @@ function formatDuration(seconds){
 }
 function activityKind(a){
   const raw=String(a.type||'').trim();
-  const full=(String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const full=(raw+' '+String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const treadmill=/\b(pas|pase|pasu|bezecky pas|treadmill)\b/.test(full);
   const strength=/\b(posilov\w*|silov\w*|cink\w*|bench|drep\w*|leg press|deadlift|hevy|stroj\w*|seri\w*)\b/.test(full);
   function minutes(words){
@@ -88,7 +88,7 @@ function activityKind(a){
 function activityDistanceMeters(a){
   const recorded=Number(a.distanceMeters);
   if(a.distanceMeters!=null&&Number.isFinite(recorded)&&recorded>0)return recorded;
-  const text=(String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const text=(String(a.type||'')+' '+String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const treadmill='(?:bezeck(?:y|em|eho)?\\s+pas|na\\s+pasu|pasu|pase|treadmill)';
   const distance='(\\d{1,3}(?:[.,]\\d{1,3})?)\\s*(km|kilometr(?:u|y)?|m|metru|metry)\\b';
   const patterns=[new RegExp(treadmill+'[^\\n.;]{0,55}?'+distance,'gi'),new RegExp(distance+'[^\\n.;]{0,55}?'+treadmill,'gi')];
@@ -97,6 +97,17 @@ function activityDistanceMeters(a){
     let match;
     while((match=patterns[i].exec(text))){
       const amount=Number(match[i===0?1:1].replace(',','.'));
+      const unit=match[2];
+      const metres=unit==='m'||unit.startsWith('metr')?amount:amount*1000;
+      if(Number.isFinite(metres)&&metres>0&&metres<=100000)found.push(metres);
+    }
+  }
+  // Treadmill is a Strava activity type, not necessarily a word in the description.
+  // When the type is Treadmill, an explicit distance anywhere in its description is valid.
+  if(!found.length&&/treadmill|bezecky pas/.test(text)){
+    const re=new RegExp(distance,'gi');let match;
+    while((match=re.exec(text))){
+      const amount=Number(match[1].replace(',','.'));
       const unit=match[2];
       const metres=unit==='m'||unit.startsWith('metr')?amount:amount*1000;
       if(Number.isFinite(metres)&&metres>0&&metres<=100000)found.push(metres);
