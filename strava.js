@@ -98,7 +98,8 @@ function renderStrava(){
   typeSelect.innerHTML='<option value="all">Všechny aktivity</option>'+typesAvailable.map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('');
   typeSelect.value=typesAvailable.includes(selectedType)?selectedType:'all';
   const filtered=inYear.filter(x=>typeSelect.value==='all'||activityKind(x)===typeSelect.value);
-  document.getElementById('stravaCount').textContent=String(filtered.length);
+  const today=new Date();const todayUtc=Date.UTC(today.getFullYear(),today.getMonth(),today.getDate());const startUtc=Date.UTC(2026,4,25);const daysSinceStart=Math.max(0,Math.floor((todayUtc-startUtc)/86400000)+1);
+  document.getElementById('stravaCount').textContent=filtered.length+' / '+daysSinceStart;
   document.getElementById('stravaDistance').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.distanceMeters)||0),0)/1000)+' km';
   document.getElementById('stravaHours').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/3600)+' h';
   const types={};for(const a of filtered)types[activityKind(a)]=(types[activityKind(a)]||0)+1;
