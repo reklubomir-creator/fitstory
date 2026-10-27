@@ -64,23 +64,38 @@ function formatDuration(seconds){
 }
 function activityKind(a){
   const raw=String(a.type||'').trim();
-  const full=(raw+' '+String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const treadmill=/\b(pas|pase|pasu|bezecky pas|treadmill)\b/.test(full);
-  const strength=/\b(posilov\w*|silov\w*|cink\w*|bench|drep\w*|leg press|deadlift|hevy|stroj\w*|seri\w*)\b/.test(full);
-  function minutes(words){
-    let total=0;
-    for(const word of words){
-      const pattern=word+'[^\\n.;]{0,30}?(\\d{1,3})\\s*(?:minut|min|minutes)\\b';
-      const re=new RegExp(pattern,'gi');let match;
-      while((match=re.exec(full)))total+=Number(match[1]);
+  const name=String(a.name||'');
+  const description=String(a.description||'');
+  const normalize=v=>String(v).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const title=normalize(raw+' '+name);
+  const full=normalize(name+' '+description);
+  const treadmill=/\b(pas|pase|pasu|bezecky pas|treadmill|indoor run|indoor walk)\b/;
+  const strength=/\b(posilov\w*|silov\w*|cink\w*|bench|drep\w*|leg press|deadlift|stroj\w*|seri\w*|squat|curl|row|press|extension|raise|pulldown|pullup|lat pulldown)\b/;
+  // "Logged with Hevy" is a generic export footer, not evidence of strength training.
+  const lines=description.split(/\r?\n/).map(x=>normalize(x.trim())).filter(Boolean);
+  let treadmillSets=0,otherSets=0,treadmillMinutes=0,exercise='';
+  for(const line of lines){
+    const set=line.match(/^set\s+\d+\s*:/);
+    if(set){
+      if(treadmill.test(exercise)){
+        treadmillSets++;
+        const m=line.match(/(?:-|–)\s*(\d+(?:[.,]\d+)?)\s*(?:min|minutes?)\b/);
+        if(m)treadmillMinutes+=Number(m[1].replace(',','.'));
+      }else if(exercise)otherSets++;
+    }else if(!/^logged with\b/.test(line)){
+      exercise=line;
     }
-    return total;
   }
-  const treadmillMin=minutes(['pas','pase','pasu','bezecky pas','treadmill']);
-  const strengthMin=minutes(['posilovani','silovy trenink','cinky','stroje','strength']);
-  if(treadmillMin&&strengthMin)return treadmillMin>strengthMin?'Trénink':'Posilování';
-  if(treadmill&&!strength)return 'Trénink';
-  if(strength&&!treadmill)return 'Posilování';
+  if(treadmillSets&&!otherSets)return 'Trénink';
+  if(otherSets&&!treadmillSets)return 'Posilování';
+  if(treadmillSets&&otherSets){
+    // Mixed session: classify by the dominant logged work, not by generic Strava type.
+    return treadmillMinutes>0&&treadmillMinutes>otherSets*2?'Trénink':'Posilování';
+  }
+  if(treadmill.test(title)&&!strength.test(full))return 'Trénink';
+  if(treadmill.test(full)&&!strength.test(full))return 'Trénink';
+  if(strength.test(full)&&!treadmill.test(full))return 'Posilování';
+  if(/^(treadmill|run|walk|virtualrun|indoor run|indoor walk)$/i.test(raw))return 'Trénink';
   if(/^(weight training|strength training|weighttraining|strengthtraining|posilovani|silovy trenink)$/i.test(raw))return 'Posilování';
   if(/^(workout|training|trenink|cviceni)$/i.test(raw))return 'Trénink';
   return raw||'Ostatní';
