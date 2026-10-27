@@ -235,5 +235,6 @@ document.addEventListener('click',e=>{
   data.activities=data.activities.filter(a=>String(a.id)!==b.dataset.stravaDel);
   save();renderStrava();
 });
+document.addEventListener('radar:data-changed',renderStrava);
 renderStrava();
 })();
