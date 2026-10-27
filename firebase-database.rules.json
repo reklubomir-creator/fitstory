@@ -2,8 +2,14 @@
   "rules": {
     "users": {
       "$uid": {
-        ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid"
+        ".read": "auth != null && auth.uid === 'M8VZmCpDslf5lJiziK5fHAsXnFg1' && $uid === auth.uid",
+        ".write": "auth != null && auth.uid === 'M8VZmCpDslf5lJiziK5fHAsXnFg1' && $uid === auth.uid"
+      }
+    },
+    "public": {
+      "radar": {
+        ".read": true,
+        ".write": "auth != null && auth.uid === 'M8VZmCpDslf5lJiziK5fHAsXnFg1'"
       }
     }
   }
