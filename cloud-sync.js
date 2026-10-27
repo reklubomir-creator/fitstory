@@ -17,6 +17,16 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     const {getDatabase,ref,get,onValue,set,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js');
     const app=initializeApp(config);
     const auth=getAuth(app),db=getDatabase(app);
+    const OWNER_UID='M8VZmCpDslf5lJiziK5fHAsXnFg1';
+    const publicRef=ref(db,'public/radar');
+    let publicSnapshot=null;
+    onValue(publicRef,snap=>{publicSnapshot=snap.val();window.radarPublicRender?.(publicSnapshot)},err=>{if(document.body.classList.contains('guest'))document.getElementById('progressText').textContent='Veřejná data nejsou dostupná: '+err.message});
+    async function publishPublic(){
+      if(!user||user.uid!==OWNER_UID||!active)return;
+      const weights=(Array.isArray(data.weights)?data.weights:[]).filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
+      const activity=window.radarPublicExerciseStats?.()||{count:0,distanceKm:0,hours:0};
+      await set(publicRef,{weights,activity,updatedAt:new Date().toISOString()});
+    }
     let user=null,active=false,unsubscribe=null,remoteExists=false,remoteVersion=null;
     let pending=false,writing=false,writeTimer=null;
     const fingerprint=value=>{let hash=2166136261;for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619)}return (hash>>>0).toString(16)};
@@ -57,6 +67,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       localStorage.setItem(linkedKey,user.uid);
       localStorage.setItem(hashKey,currentHash());
       subscribe();
+      get(publicRef).then(snap=>{if(!snap.exists())publishPublic().catch(err=>setStatus('Soukromá synchronizace funguje, veřejný přehled zatím ne: '+err.message))}).catch(()=>{});
       setStatus('Synchronizace je aktivní. Změny se automaticky ukládají do cloudu.');
     }
     async function upload(){
@@ -67,6 +78,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         writing=true;
         await set(dataRef(),{data:JSON.parse(localText()),updatedAt:serverTimestamp()});
         writing=false;remoteExists=true;connect();
+        await publishPublic().catch(err=>setStatus('Soukromá data nahrána, ale zveřejnění selhalo: '+err.message));
       }catch(err){writing=false;setStatus('Nahrání selhalo: '+err.message)}
     }
     async function download(){
@@ -88,6 +100,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         localStorage.setItem(hashKey,sentHash);
         pending=currentHash()!==sentHash;
         setStatus(pending?'Během ukládání přibyly změny; dokončuji synchronizaci…':'Všechny změny jsou synchronizované.');
+        if(!pending)await publishPublic().catch(err=>setStatus('Soukromá data uložena, ale veřejný přehled se neaktualizoval: '+err.message));
       }catch(err){setStatus('Změny jsou uložené místně, cloud zatím ne: '+err.message)}
       finally{writing=false;if(pending){clearTimeout(writeTimer);writeTimer=setTimeout(flush,2000)}}
     }
@@ -100,10 +113,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       try{await signInWithEmailAndPassword(auth,btn('cloudEmail').value.trim(),btn('cloudPassword').value)}
       catch(err){setStatus('Přihlášení selhalo: '+err.message)}
     };
-    btn('cloudSignUp').onclick=async()=>{
-      try{await createUserWithEmailAndPassword(auth,btn('cloudEmail').value.trim(),btn('cloudPassword').value)}
-      catch(err){setStatus('Vytvoření účtu selhalo: '+err.message)}
-    };
+
     btn('cloudSignOut').onclick=()=>signOut(auth);
     btn('cloudUpload').onclick=upload;
     btn('cloudDownload').onclick=download;
@@ -111,7 +121,9 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       if(unsubscribe){unsubscribe();unsubscribe=null}
       user=u;active=false;pending=false;clearTimeout(writeTimer);
       login.hidden=!!u;logged.hidden=!u;
-      if(!u){setStatus('Přihlas se pro synchronizaci. Místní data zůstávají dostupná.');return}
+      if(!u){window.radarAdminSetOwner?.(false);setStatus('Veřejný přehled je dostupný bez přihlášení. Pro úpravy se přihlas.');return}
+      if(u.uid!==OWNER_UID){window.radarAdminSetOwner?.(false);setStatus('Tento účet nemá oprávnění spravovat RADAR.');await signOut(auth);return}
+      window.radarAdminSetOwner?.(true);
       btn('cloudPassword').value='';
       btn('cloudUser').textContent='Přihlášený účet: '+(u.email||u.uid);
       setStatus('Kontroluji cloudová data…');
