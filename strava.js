@@ -64,28 +64,64 @@ function formatDuration(seconds){
 }
 function renderStrava(){
   const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
-  const yearSelect=document.getElementById('stravaYear');
-  if(!yearSelect)return;
-  const selected=yearSelect.value;
+  const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
+  if(!yearSelect||!typeSelect)return;
+  const selectedYear=yearSelect.value,selectedType=typeSelect.value;
   const years=[...new Set(all.map(x=>x.date.slice(0,4)))].sort().reverse();
-  yearSelect.innerHTML='<option value="all">Všechny roky</option>'+years.map(y=>'<option value="'+y+'">'+y+'</option>').join('');
-  yearSelect.value=years.includes(selected)?selected:'all';
-  const filtered=all.filter(x=>yearSelect.value==='all'||x.date.startsWith(yearSelect.value));
+  yearSelect.innerHTML='<option value="all">Všechny roky</option>'+years.map(y=>'<option value="'+escapeHtml(y)+'">'+escapeHtml(y)+'</option>').join('');
+  yearSelect.value=years.includes(selectedYear)?selectedYear:'all';
+  const inYear=all.filter(x=>yearSelect.value==='all'||x.date.startsWith(yearSelect.value));
+  const typesAvailable=[...new Set(inYear.map(x=>x.type||'Ostatní'))].sort((a,b)=>a.localeCompare(b,'cs'));
+  typeSelect.innerHTML='<option value="all">Všechny aktivity</option>'+typesAvailable.map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('');
+  typeSelect.value=typesAvailable.includes(selectedType)?selectedType:'all';
+  const filtered=inYear.filter(x=>typeSelect.value==='all'||(x.type||'Ostatní')===typeSelect.value);
   document.getElementById('stravaCount').textContent=String(filtered.length);
-  document.getElementById('stravaDistance').textContent=fmt(filtered.reduce((s,x)=>s+(Number(x.distanceMeters)||0),0)/1000)+' km';
-  document.getElementById('stravaHours').textContent=fmt(filtered.reduce((s,x)=>s+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/3600)+' h';
-  const types={};for(const a of filtered)types[a.type]=(types[a.type]||0)+1;
+  document.getElementById('stravaDistance').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.distanceMeters)||0),0)/1000)+' km';
+  document.getElementById('stravaHours').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/3600)+' h';
+  const types={};for(const a of filtered)types[a.type||'Ostatní']=(types[a.type||'Ostatní']||0)+1;
   document.getElementById('stravaTypes').textContent=String(Object.keys(types).length);
   document.getElementById('stravaBreakdown').textContent=Object.entries(types).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+': '+v).join(' · ');
-  document.getElementById('stravaRows').innerHTML=filtered.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(a=>'<tr>'+
-    '<td>'+escapeHtml(a.date)+'</td><td title="'+escapeHtml(a.description||'')+'">'+escapeHtml(a.name)+'</td><td>'+escapeHtml(a.type)+'</td>'+
-    '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
-    '<td>'+(a.distanceMeters===null||a.distanceMeters===undefined?'—':fmt(a.distanceMeters/1000,2))+'</td>'+
-    '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
-    '<td>'+(a.calories==null?'—':fmt(a.calories,0))+'</td>'+
-    '<td><button class="delete" data-strava-del="'+escapeHtml(a.id)+'">Smazat</button></td></tr>').join('');
+  document.getElementById('stravaRows').innerHTML=filtered.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(a=>{
+    const id=escapeHtml(a.id);
+    const stats=[
+      ['Délka',formatDuration(a.movingSeconds??a.elapsedSeconds)],
+      ['Vzdálenost',a.distanceMeters==null?null:fmt(a.distanceMeters/1000,2)+' km'],
+      ['Průměrný tep',a.avgHeartRate==null?null:fmt(a.avgHeartRate,0)+' tepů/min'],
+      ['Maximální tep',a.maxHeartRate==null?null:fmt(a.maxHeartRate,0)+' tepů/min'],
+      ['Kalorie',a.calories==null?null:fmt(a.calories,0)+' kcal'],
+      ['Převýšení',a.elevationMeters==null?null:fmt(a.elevationMeters,0)+' m'],
+      ['Série',a.sets==null?null:fmt(a.sets,0)],
+      ['Opakování',a.reps==null?null:fmt(a.reps,0)]
+    ].filter(x=>x[1]!==null).map(([k,v])=>'<span class="pill">'+escapeHtml(k)+': '+escapeHtml(v)+'</span>').join('');
+    const description=String(a.description||'').trim();
+    const details='<div class="activity-detail-inner">'+stats+
+      (description?'<pre>'+escapeHtml(description)+'</pre>':'<p class="muted">K této aktivitě není v exportu Stravy uveden podrobný popis.</p>')+'</div>';
+    return '<tr class="activity-row" data-activity-toggle="'+id+'">'+
+      '<td>'+escapeHtml(a.date)+'</td>'+
+      '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+escapeHtml(a.name)+'</button></td>'+
+      '<td>'+escapeHtml(a.type)+'</td>'+
+      '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
+      '<td>'+(a.distanceMeters==null?'—':fmt(a.distanceMeters/1000,2))+'</td>'+
+      '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
+      '<td>'+(a.calories==null?'—':fmt(a.calories,0))+'</td>'+
+      '<td><button class="delete" data-strava-del="'+id+'">Smazat</button></td></tr>'+
+      '<tr class="activity-detail" data-detail-for="'+id+'" style="display:none"><td colspan="8">'+details+'</td></tr>';
+  }).join('');
 }
 document.getElementById('stravaYear').addEventListener('change',renderStrava);
+document.getElementById('stravaType').addEventListener('change',renderStrava);
+document.getElementById('stravaRows').addEventListener('click',e=>{
+  if(e.target.closest('[data-strava-del]'))return;
+  const row=e.target.closest('[data-activity-toggle]');if(!row)return;
+  const id=row.dataset.activityToggle;
+  const detail=[...document.querySelectorAll('[data-detail-for]')].find(el=>el.dataset.detailFor===id);
+  const button=row.querySelector('[data-activity-button]');
+  if(!detail||!button)return;
+  const expanded=detail.style.display==='none';
+  detail.style.display=expanded?'table-row':'none';
+  button.setAttribute('aria-expanded',String(expanded));
+  button.textContent=(expanded?'▾ ':'▸ ')+button.textContent.slice(2);
+});
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='strava')renderStrava()}));
 document.getElementById('stravaLoad').addEventListener('click',async()=>{
   const file=document.getElementById('stravaFile').files[0],status=document.getElementById('stravaStatus');
