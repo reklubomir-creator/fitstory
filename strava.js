@@ -62,6 +62,29 @@ function formatDuration(seconds){
   if(seconds===null||seconds===undefined)return '—';
   const m=Math.round(seconds/60);return m>=60?Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min':m+' min';
 }
+function activityKind(a){
+  const raw=String(a.type||'').trim();
+  const full=(String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const treadmill=/\b(pas|pase|pasu|bezecky pas|treadmill)\b/.test(full);
+  const strength=/\b(posilov\w*|silov\w*|cink\w*|bench|drep\w*|leg press|deadlift|hevy|stroj\w*|seri\w*)\b/.test(full);
+  function minutes(words){
+    let total=0;
+    for(const word of words){
+      const pattern=word+'[^\\n.;]{0,30}?(\\d{1,3})\\s*(?:minut|min|minutes)\\b';
+      const re=new RegExp(pattern,'gi');let match;
+      while((match=re.exec(full)))total+=Number(match[1]);
+    }
+    return total;
+  }
+  const treadmillMin=minutes(['pas','pase','pasu','bezecky pas','treadmill']);
+  const strengthMin=minutes(['posilovani','silovy trenink','cinky','stroje','strength']);
+  if(treadmillMin&&strengthMin)return treadmillMin>strengthMin?'Trénink':'Posilování';
+  if(treadmill&&!strength)return 'Trénink';
+  if(strength&&!treadmill)return 'Posilování';
+  if(/^(weight training|strength training|weighttraining|strengthtraining|posilovani|silovy trenink)$/i.test(raw))return 'Posilování';
+  if(/^(workout|training|trenink|cviceni)$/i.test(raw))return 'Trénink';
+  return raw||'Ostatní';
+}
 function renderStrava(){
   const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
   const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
@@ -71,14 +94,14 @@ function renderStrava(){
   yearSelect.innerHTML='<option value="all">Všechny roky</option>'+years.map(y=>'<option value="'+escapeHtml(y)+'">'+escapeHtml(y)+'</option>').join('');
   yearSelect.value=years.includes(selectedYear)?selectedYear:'all';
   const inYear=all.filter(x=>yearSelect.value==='all'||x.date.startsWith(yearSelect.value));
-  const typesAvailable=[...new Set(inYear.map(x=>x.type||'Ostatní'))].sort((a,b)=>a.localeCompare(b,'cs'));
+  const typesAvailable=[...new Set(inYear.map(activityKind))].sort((a,b)=>a.localeCompare(b,'cs'));
   typeSelect.innerHTML='<option value="all">Všechny aktivity</option>'+typesAvailable.map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('');
   typeSelect.value=typesAvailable.includes(selectedType)?selectedType:'all';
-  const filtered=inYear.filter(x=>typeSelect.value==='all'||(x.type||'Ostatní')===typeSelect.value);
+  const filtered=inYear.filter(x=>typeSelect.value==='all'||activityKind(x)===typeSelect.value);
   document.getElementById('stravaCount').textContent=String(filtered.length);
   document.getElementById('stravaDistance').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.distanceMeters)||0),0)/1000)+' km';
   document.getElementById('stravaHours').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/3600)+' h';
-  const types={};for(const a of filtered)types[a.type||'Ostatní']=(types[a.type||'Ostatní']||0)+1;
+  const types={};for(const a of filtered)types[activityKind(a)]=(types[activityKind(a)]||0)+1;
   document.getElementById('stravaTypes').textContent=String(Object.keys(types).length);
   document.getElementById('stravaBreakdown').textContent=Object.entries(types).sort((a,b)=>b[1]-a[1]).map(([k,v])=>k+': '+v).join(' · ');
   document.getElementById('stravaRows').innerHTML=filtered.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(a=>{
@@ -99,7 +122,7 @@ function renderStrava(){
     return '<tr class="activity-row" data-activity-toggle="'+id+'">'+
       '<td>'+escapeHtml(a.date)+'</td>'+
       '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+escapeHtml(a.name)+'</button></td>'+
-      '<td>'+escapeHtml(a.type)+'</td>'+
+      '<td>'+escapeHtml(activityKind(a))+'</td>'+
       '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
       '<td>'+(a.distanceMeters==null?'—':fmt(a.distanceMeters/1000,2))+'</td>'+
       '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
