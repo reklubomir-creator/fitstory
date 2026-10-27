@@ -31,10 +31,10 @@ function parseActivities(text){
   }
   const required=[['ID aktivity','Activity ID'],['Datum aktivity','Activity Date'],['Název aktivity','Activity Name'],['Typ aktivity','Activity Type']];
   if(required.some(([cs,en])=>!header.includes(cs)&&!header.includes(en)))throw Error('Soubor nemá požadované sloupce Strava');
-  const out=[];let skipped=0;
+  const out=[];let skipped=0;let beforeDiet=0;
   for(const row of rows){
     const id=get(row,'ID aktivity','Activity ID').trim(),date=day(get(row,'Datum aktivity','Activity Date'));
-    if(!id||!date){skipped++;continue}
+    if(!id||!date){skipped++;continue}if(date<'2026-05-25'){beforeDiet++;continue}
     const distanceMeters=n(get(row,'Vzdálenost','Distance',1));
     const distanceKm=n(get(row,'Vzdálenost','Distance',0));
     const meters=distanceMeters!==null?distanceMeters:(distanceKm===null?null:distanceKm*1000);
@@ -56,14 +56,14 @@ function parseActivities(text){
       source:'Strava CSV'
     });
   }
-  return {out,skipped};
+  return {out,skipped,beforeDiet};
 }
 function formatDuration(seconds){
   if(seconds===null||seconds===undefined)return '—';
   const m=Math.round(seconds/60);return m>=60?Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' min':m+' min';
 }
 function renderStrava(){
-  const all=Array.isArray(data.activities)?data.activities:[];
+  const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>x.date>='2026-05-25');
   const yearSelect=document.getElementById('stravaYear');
   if(!yearSelect)return;
   const selected=yearSelect.value;
@@ -98,7 +98,7 @@ document.getElementById('stravaLoad').addEventListener('click',async()=>{
     data.activities.push(...incoming);
     try{save()}catch(e){data.activities.splice(data.activities.length-incoming.length,incoming.length);throw Error('Úložiště prohlížeče je plné. Exportuj zálohu a zkus import znovu.')}
     renderStrava();
-    status.textContent='Hotovo: přidáno '+incoming.length+' aktivit, přeskočeno '+(parsed.out.length-incoming.length)+' již uložených nebo opakovaných'+(parsed.skipped?', neplatných řádků: '+parsed.skipped:'')+'.';
+    status.textContent='Hotovo: přidáno '+incoming.length+' aktivit od 25. 5. 2026, přeskočeno '+(parsed.out.length-incoming.length)+' již uložených nebo opakovaných, '+parsed.beforeDiet+' starších aktivit'+(parsed.skipped?', neplatných řádků: '+parsed.skipped:'')+'.';
   }catch(e){status.textContent='Import se nezdařil: '+e.message}
 });
 document.addEventListener('click',e=>{
