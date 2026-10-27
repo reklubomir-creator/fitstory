@@ -25,7 +25,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       if(!user||user.uid!==OWNER_UID||!active)return;
       const weights=(Array.isArray(data.weights)?data.weights:[]).filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
       const activity=window.radarPublicExerciseStats?.()||{count:0,distanceKm:0,hours:0};
-      await set(publicRef,{weights,activity,updatedAt:new Date().toISOString()});
+      const exerciseList=window.radarPublicExerciseList?.()||[];
+      await set(publicRef,{weights,activity,exerciseList,updatedAt:new Date().toISOString()});
     }
     let user=null,active=false,unsubscribe=null,remoteExists=false,remoteVersion=null;
     let pending=false,writing=false,writeTimer=null;
@@ -67,7 +68,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       localStorage.setItem(linkedKey,user.uid);
       localStorage.setItem(hashKey,currentHash());
       subscribe();
-      get(publicRef).then(snap=>{if(!snap.exists())publishPublic().catch(err=>setStatus('Soukromá synchronizace funguje, veřejný přehled zatím ne: '+err.message))}).catch(()=>{});
+      publishPublic().catch(err=>setStatus('Soukromá synchronizace funguje, ale zveřejnění přehledu selhalo: '+err.message));
       setStatus('Synchronizace je aktivní. Změny se automaticky ukládají do cloudu.');
     }
     async function upload(){
