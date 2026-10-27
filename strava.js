@@ -85,6 +85,25 @@ function activityKind(a){
   if(/^(workout|training|trenink|cviceni)$/i.test(raw))return 'Trénink';
   return raw||'Ostatní';
 }
+function activityDistanceMeters(a){
+  const recorded=Number(a.distanceMeters);
+  if(a.distanceMeters!=null&&Number.isFinite(recorded)&&recorded>0)return recorded;
+  const text=(String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const treadmill='(?:bezeck(?:y|em|eho)?\\s+pas|na\\s+pasu|pasu|pase|treadmill)';
+  const distance='(\\d{1,3}(?:[.,]\\d{1,3})?)\\s*(km|kilometr(?:u|y)?|m|metru|metry)\\b';
+  const patterns=[new RegExp(treadmill+'[^\\n.;]{0,55}?'+distance,'gi'),new RegExp(distance+'[^\\n.;]{0,55}?'+treadmill,'gi')];
+  const found=[];
+  for(let i=0;i<patterns.length;i++){
+    let match;
+    while((match=patterns[i].exec(text))){
+      const amount=Number(match[i===0?1:1].replace(',','.'));
+      const unit=match[2];
+      const metres=unit==='m'||unit.startsWith('metr')?amount:amount*1000;
+      if(Number.isFinite(metres)&&metres>0&&metres<=100000)found.push(metres);
+    }
+  }
+  return found.length?Math.max(...found):(a.distanceMeters==null?null:recorded);
+}
 function renderStrava(){
   const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
   const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
@@ -100,7 +119,7 @@ function renderStrava(){
   const filtered=inYear.filter(x=>typeSelect.value==='all'||activityKind(x)===typeSelect.value);
   const today=new Date();const todayUtc=Date.UTC(today.getFullYear(),today.getMonth(),today.getDate());const startUtc=Date.UTC(2026,4,25);const daysSinceStart=Math.max(0,Math.floor((todayUtc-startUtc)/86400000)+1);
   document.getElementById('stravaCount').textContent=filtered.length+' / '+daysSinceStart;
-  document.getElementById('stravaDistance').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.distanceMeters)||0),0)/1000)+' km';
+  document.getElementById('stravaDistance').textContent=fmt(filtered.reduce((sum,x)=>sum+(activityDistanceMeters(x)||0),0)/1000)+' km';
   document.getElementById('stravaHours').textContent=fmt(filtered.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/3600)+' h';
   const types={};for(const a of filtered)types[activityKind(a)]=(types[activityKind(a)]||0)+1;
   document.getElementById('stravaTypes').textContent=String(Object.keys(types).length);
@@ -109,7 +128,7 @@ function renderStrava(){
     const id=escapeHtml(a.id);
     const stats=[
       ['Délka',formatDuration(a.movingSeconds??a.elapsedSeconds)],
-      ['Vzdálenost',a.distanceMeters==null?null:fmt(a.distanceMeters/1000,2)+' km'],
+      ['Vzdálenost',activityDistanceMeters(a)==null?null:fmt(activityDistanceMeters(a)/1000,2)+' km'],
       ['Průměrný tep',a.avgHeartRate==null?null:fmt(a.avgHeartRate,0)+' tepů/min'],
       ['Maximální tep',a.maxHeartRate==null?null:fmt(a.maxHeartRate,0)+' tepů/min'],
       ['Kalorie',a.calories==null?null:fmt(a.calories,0)+' kcal'],
@@ -125,7 +144,7 @@ function renderStrava(){
       '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+escapeHtml(a.name)+'</button></td>'+
       '<td>'+escapeHtml(activityKind(a))+'</td>'+
       '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
-      '<td>'+(a.distanceMeters==null?'—':fmt(a.distanceMeters/1000,2))+'</td>'+
+      '<td>'+(activityDistanceMeters(a)==null?'—':fmt(activityDistanceMeters(a)/1000,2))+'</td>'+
       '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
       '<td>'+(a.calories==null?'—':fmt(a.calories,0))+'</td>'+
       '<td><button class="delete" data-strava-del="'+id+'">Smazat</button></td></tr>'+
