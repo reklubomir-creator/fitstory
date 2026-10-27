@@ -83,11 +83,13 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       writing=true;
       try{
         const payload=JSON.parse(localText());
+        const sentHash=fingerprint(JSON.stringify(payload));
         await set(dataRef(),{data:payload,updatedAt:serverTimestamp()});
-        pending=false;localStorage.setItem(hashKey,fingerprint(JSON.stringify(payload)));
-        setStatus('Všechny změny jsou synchronizované.');
+        localStorage.setItem(hashKey,sentHash);
+        pending=currentHash()!==sentHash;
+        setStatus(pending?'Během ukládání přibyly změny; dokončuji synchronizaci…':'Všechny změny jsou synchronizované.');
       }catch(err){setStatus('Změny jsou uložené místně, cloud zatím ne: '+err.message)}
-      finally{writing=false;if(pending)clearTimeout(writeTimer)}
+      finally{writing=false;if(pending){clearTimeout(writeTimer);writeTimer=setTimeout(flush,2000)}}
     }
     window.radarCloudChanged=()=>{
       if(!active||!user)return;
