@@ -88,22 +88,45 @@ function activityKind(a){
 function activityDistanceMeters(a){
   const recorded=Number(a.distanceMeters);
   if(a.distanceMeters!=null&&Number.isFinite(recorded)&&recorded>0)return recorded;
-  const text=(String(a.type||'')+' '+String(a.name||'')+' '+String(a.description||'')).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const description=String(a.description||'');
+  // Hevy lists each treadmill interval as its own exercise block:
+  // Treadmill\nSet 1: 0.4km - 5min\n\nTreadmill\nSet 1: 0.4km - 5min
+  // Sum ALL treadmill sets rather than taking the largest single interval.
+  let treadmillSetMeters=0;
+  let treadmillSets=0;
+  let inTreadmill=false;
+  for(const rawLine of description.split(/\r?\n/)){
+    const line=rawLine.trim();
+    if(!line)continue;
+    const set=line.match(/^Set\s+\d+\s*:\s*(\d+(?:[.,]\d+)?)\s*(km|kilomet(?:er|re)s?|kilometr(?:u|y|ů)?|m|metr(?:u|y|ů)?)\b/i);
+    if(set){
+      if(inTreadmill){
+        const amount=Number(set[1].replace(',','.'));
+        const unit=set[2].toLowerCase();
+        const metres=unit==='m'||unit.startsWith('metr')?amount:amount*1000;
+        if(Number.isFinite(metres)&&metres>0&&metres<=100000){treadmillSetMeters+=metres;treadmillSets++}
+      }
+    }else if(!/^Logged with\b/i.test(line)){
+      // A non-set line is an exercise heading; only the Treadmill heading activates accumulation.
+      inTreadmill=/^(treadmill|běžecký pás|bezecky pas)$/i.test(line);
+    }
+  }
+  if(treadmillSets)return Math.round(treadmillSetMeters*100)/100;
+  // Fallback for manually entered descriptions: explicit distance near treadmill wording.
+  const text=(String(a.type||'')+' '+String(a.name||'')+' '+description).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   const treadmill='(?:bezeck(?:y|em|eho)?\\s+pas|na\\s+pasu|pasu|pase|treadmill)';
   const distance='(\\d{1,3}(?:[.,]\\d{1,3})?)\\s*(km|kilometr(?:u|y)?|m|metru|metry)\\b';
   const patterns=[new RegExp(treadmill+'[^\\n.;]{0,55}?'+distance,'gi'),new RegExp(distance+'[^\\n.;]{0,55}?'+treadmill,'gi')];
   const found=[];
-  for(let i=0;i<patterns.length;i++){
+  for(const pattern of patterns){
     let match;
-    while((match=patterns[i].exec(text))){
-      const amount=Number(match[i===0?1:1].replace(',','.'));
+    while((match=pattern.exec(text))){
+      const amount=Number(match[1].replace(',','.'));
       const unit=match[2];
       const metres=unit==='m'||unit.startsWith('metr')?amount:amount*1000;
       if(Number.isFinite(metres)&&metres>0&&metres<=100000)found.push(metres);
     }
   }
-  // Treadmill is a Strava activity type, not necessarily a word in the description.
-  // When the type is Treadmill, an explicit distance anywhere in its description is valid.
   if(!found.length&&/treadmill|bezecky pas/.test(text)){
     const re=new RegExp(distance,'gi');let match;
     while((match=re.exec(text))){
