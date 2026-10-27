@@ -153,6 +153,7 @@ function activityDistanceMeters(a){
   }
   return found.length?Math.max(...found):(a.distanceMeters==null?null:recorded);
 }
+window.radarPublicExerciseStats=function(){const a=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');return {count:a.length,distanceKm:Math.round(a.reduce((sum,x)=>sum+(activityDistanceMeters(x)||0),0)/100)/10,hours:Math.round(a.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/360)/10}};
 function renderStrava(){
   const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
   const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
