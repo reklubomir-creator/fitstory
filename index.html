@@ -61,7 +61,9 @@ try{
   if(cached&&typeof cached==='object'&&Array.isArray(cached.weights))window.radarPublicSnapshot=cached;
 }catch(e){/* Storage unavailable: load normally. */}
 window.radarAdminSetOwner=function(isOwner){
+  const wasGuest=document.body.classList.contains('guest');
   document.body.classList.toggle('guest',!isOwner);
+  if(!isOwner&&!wasGuest)radarLastPublicRender='';
   const active=document.querySelector('#nav button.active');
   if(!isOwner&&active&&!['overview','data','strava','body','labs'].includes(active.dataset.page)){
     document.querySelectorAll('[data-page],section').forEach(el=>el.classList.remove('active'));
