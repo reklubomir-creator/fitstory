@@ -58,6 +58,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         try{
           if(fingerprint(JSON.stringify(remote.data))!==currentHash()){
             applyRemote(remote);
+            publishPublic().catch(err=>setStatus('Soukromá data jsou načtena, ale veřejný přehled se neaktualizoval: '+err.message));
             setStatus('Synchronizováno – změny z dalšího zařízení byly načteny.');
           }
         }catch(err){setStatus('Chyba načítání: '+err.message)}
@@ -68,7 +69,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       localStorage.setItem(linkedKey,user.uid);
       localStorage.setItem(hashKey,currentHash());
       subscribe();
-      publishPublic().catch(err=>setStatus('Soukromá synchronizace funguje, ale zveřejnění přehledu selhalo: '+err.message));
+      // Public projection is published only after the authoritative private snapshot has loaded.
       setStatus('Synchronizace je aktivní. Změny se automaticky ukládají do cloudu.');
     }
     async function upload(){
