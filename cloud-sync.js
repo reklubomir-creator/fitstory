@@ -58,9 +58,9 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         try{
           if(fingerprint(JSON.stringify(remote.data))!==currentHash()){
             applyRemote(remote);
-            publishPublic().catch(err=>setStatus('Soukromá data jsou načtena, ale veřejný přehled se neaktualizoval: '+err.message));
             setStatus('Synchronizováno – změny z dalšího zařízení byly načteny.');
           }
+          publishPublic().catch(err=>setStatus('Soukromá data jsou načtena, ale veřejný přehled se neaktualizoval: '+err.message));
         }catch(err){setStatus('Chyba načítání: '+err.message)}
       },err=>setStatus('Cloud není dostupný: '+err.message));
     }
