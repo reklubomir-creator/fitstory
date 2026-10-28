@@ -17,7 +17,18 @@ function parseCsv(text){
   return rows;
 }
 function n(v){if(v===undefined||v===null||String(v).trim()==='')return null;const x=Number(String(v).replace(/\s/g,'').replace(',','.'));return Number.isFinite(x)?x:null}
-function day(v){const m=String(v||'').match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');const iso=String(v||'').match(/^(\d{4}-\d{2}-\d{2})/);return iso?iso[1]:null}
+function day(v){
+  const raw=String(v||'').trim();let year,month,dayNum;
+  let m=raw.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})(?:\b|\s|$)/);
+  if(m){dayNum=+m[1];month=+m[2];year=+m[3]}
+  else if((m=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s]|$)/))){year=+m[1];month=+m[2];dayNum=+m[3]}
+  else if((m=raw.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2}),?\s+(\d{4})/i))){month=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'].indexOf(m[1].slice(0,3).toLowerCase())+1;dayNum=+m[2];year=+m[3]}
+  else if((m=raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\b|\s|$)/))){month=+m[1];dayNum=+m[2];year=+m[3]}
+  else return null;
+  const d=new Date(Date.UTC(year,month-1,dayNum));
+  if(year<1900||d.getUTCFullYear()!==year||d.getUTCMonth()!==month-1||d.getUTCDate()!==dayNum)return null;
+  return year+'-'+String(month).padStart(2,'0')+'-'+String(dayNum).padStart(2,'0');
+}
 function parseActivities(text){
   const rows=parseCsv(text);if(rows.length<2)throw Error('CSV je prázdné');
   const header=rows.shift().map(x=>x.trim());
