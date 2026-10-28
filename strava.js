@@ -54,7 +54,7 @@ function parseActivities(text){
     const hr=n(get(row,'Průměrná tepová frekvence','Average Heart Rate'));
     const maxHr=n(get(row,'Maximální tepová frekvence','Max Heart Rate',0));
     out.push({
-      id,date,name:get(row,'Název aktivity','Activity Name')||'Aktivita',
+      id,date,sourceFile:get(row,'Název souboru','Filename')||get(row,'Soubor','File Name')||'',name:get(row,'Název aktivity','Activity Name')||'Aktivita',
       type:get(row,'Typ aktivity','Activity Type')||'Ostatní',
       description:get(row,'Popis aktivity','Activity Description')||'',
       elapsedSeconds:elapsed,movingSeconds:moving,
@@ -237,9 +237,15 @@ document.getElementById('stravaLoad').addEventListener('click',async()=>{
     const seen=new Set();const incoming=parsed.out.filter(x=>{if(seen.has(x.id))return false;seen.add(x.id);return !existing.has(x.id)});
     if(!confirm('Načteno '+parsed.out.length+' aktivit. Nových: '+incoming.length+'. Importovat?'))return;
     data.activities.push(...incoming);
-    try{save()}catch(e){data.activities.splice(data.activities.length-incoming.length,incoming.length);throw Error('Úložiště prohlížeče je plné. Exportuj zálohu a zkus import znovu.')}
+    const enriched=[];
+    for(const item of parsed.out){
+      if(!item.sourceFile)continue;
+      const stored=data.activities.find(a=>String(a.id)===String(item.id));
+      if(stored&&stored!==item&&stored.sourceFile!==item.sourceFile){enriched.push([stored,stored.sourceFile]);stored.sourceFile=item.sourceFile}
+    }
+    try{save()}catch(e){data.activities.splice(data.activities.length-incoming.length,incoming.length);for(const [a,old] of enriched){if(old===undefined)delete a.sourceFile;else a.sourceFile=old}throw Error('Úložiště prohlížeče je plné. Exportuj zálohu a zkus import znovu.')}
     renderStrava();
-    status.textContent='Hotovo: přidáno '+incoming.length+' aktivit od 25. 5. 2026, přeskočeno '+(parsed.out.length-incoming.length)+' již uložených nebo opakovaných, '+parsed.beforeDiet+' starších aktivit'+(parsed.skipped?', neplatných řádků: '+parsed.skipped:'')+'.';
+    status.textContent='Hotovo: přidáno '+incoming.length+' aktivit, propojeno '+enriched.length+' názvů souborů od 25. 5. 2026, přeskočeno '+(parsed.out.length-incoming.length)+' již uložených nebo opakovaných, '+parsed.beforeDiet+' starších aktivit'+(parsed.skipped?', neplatných řádků: '+parsed.skipped:'')+'.';
   }catch(e){status.textContent='Import se nezdařil: '+e.message}
 });
 document.addEventListener('click',e=>{
