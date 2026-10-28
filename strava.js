@@ -191,7 +191,7 @@ function renderStrava(){
     const details='<div class="activity-detail-inner">'+stats+
       (description?'<pre>'+escapeHtml(description)+'</pre>':'<p class="muted">K této aktivitě není v exportu Stravy uveden podrobný popis.</p>')+'</div>';
     return '<tr class="activity-row" data-activity-toggle="'+id+'">'+
-      '<td>'+escapeHtml(a.date)+'</td>'+
+      '<td>'+escapeHtml(formatDateCZ(a.date))+'</td>'+
       '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+escapeHtml(a.name)+'</button></td>'+
       '<td>'+escapeHtml(activityKind(a))+'</td>'+
       '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
