@@ -130,7 +130,15 @@ async function importFiles(files){
   if(document.body.classList.contains('guest')){status.textContent='Nejdříve se přihlas do administrace.';return}
   const selected=Array.from(files).filter(f=>/\.(fit|fit\.gz|tcx|tcx\.gz|json\.gz)$/i.test(f.name));
   if(!selected.length){status.textContent='Ve výběru nejsou podporované soubory FIT / FIT.GZ / TCX / JSON.GZ.';return}
-  const map=new Map((data.activities||[]).map(a=>[String(a.id),a]));const modified=[];
+  const activities=Array.isArray(data.activities)?data.activities:[];
+  if(!activities.length){status.textContent='Nejsou načtené žádné aktivity. Nejprve nahoře naimportuj activities.csv ze stejného exportu Stravy a potom spusť import tepu znovu.';return}
+  const map=new Map(activities.map(a=>[String(a.id),a]));
+  const byFile=new Map();
+  for(const a of activities){
+    const source=String(a.sourceFile||'').split(/[\\/]/).pop().toLowerCase().trim();
+    if(source)byFile.set(source,a);
+  }
+  const modified=[];
   let imported=0,duplicate=0,unmatched=0,old=0,noHr=0,failed=0;
   const errors=[];
   byId('heartImportButton').disabled=true;
@@ -138,7 +146,7 @@ async function importFiles(files){
     for(let i=0;i<selected.length;i++){
       const file=selected[i],id=file.name.match(/^(\d+)\./)?.[1];
       status.textContent='Zpracovávám '+(i+1)+' / '+selected.length+' souborů…';
-      const activity=id?map.get(id):null;
+      const activity=byFile.get(file.name.toLowerCase())||(id?map.get(id):null);
       if(!activity){unmatched++;continue}
       if(activity.date<'2026-05-25'){old++;continue}
       if(activity.heartRate?.points?.length){duplicate++;continue}
@@ -154,7 +162,7 @@ async function importFiles(files){
     if(imported){
       try{save()}catch(e){for(const [activity,previous] of modified){if(previous===undefined)delete activity.heartRate;else activity.heartRate=previous}status.textContent='Import se nepodařilo uložit: '+e.message+'. Data zůstala beze změny. Zkontroluj volné místo prohlížeče.';return}
     }
-    status.textContent='Hotovo: '+imported+' grafů uloženo, '+duplicate+' duplicit, '+unmatched+' bez odpovídající aktivity v CSV, '+old+' starších, '+noHr+' bez tepu, '+failed+' chyb.'+(errors.length?' '+errors.join(' | '):'');
+    status.textContent='Hotovo: '+imported+' grafů uloženo, '+duplicate+' duplicit, '+unmatched+' bez odpovídající aktivity v CSV, '+old+' starších, '+noHr+' bez tepu, '+failed+' chyb. V databázi je '+activities.length+' aktivit.'+(unmatched?' Pokud jsou soubory z tohoto exportu, naimportuj znovu activities.csv: doplní se vazby podle sloupce Filename.':'')+(errors.length?' '+errors.join(' | '):'');
   }finally{byId('heartImportButton').disabled=false}
 }
 byId('heartImportButton')?.addEventListener('click',()=>{
