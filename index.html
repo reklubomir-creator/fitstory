@@ -77,7 +77,12 @@ window.radarPublicRender=function(snapshot){
   const next=JSON.stringify(snapshot);
   window.radarPublicSnapshot=snapshot;
   if(!document.body.classList.contains('guest'))return;
-  if(next===radarLastPublicRender){
+  const contentKey=JSON.stringify([snapshot.weights,snapshot.activity,snapshot.exerciseList]);
+  if(contentKey===radarLastPublicRender){
+    // A timestamp-only update must not rebuild the page or make tables jump.
+    const stamp=document.getElementById('publicUpdated');
+    if(stamp)stamp.textContent=snapshot.updatedAt?'Aktualizováno: '+new Date(snapshot.updatedAt).toLocaleString('cs-CZ'):'';
+    try{localStorage.setItem(radarPublicCacheKey,next)}catch(e){}
     // Redraw only the canvas when returning to the overview tab.
     if(document.getElementById('overview').classList.contains('active')){
       const cachedWeights=snapshot.weights.filter(w=>w&&validISODate(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)}));
@@ -86,7 +91,7 @@ window.radarPublicRender=function(snapshot){
     }
     return;
   }
-  radarLastPublicRender=next;
+  radarLastPublicRender=contentKey;
   try{localStorage.setItem(radarPublicCacheKey,next)}catch(e){}
 
   const weights=(Array.isArray(snapshot?.weights)?snapshot.weights:[])
