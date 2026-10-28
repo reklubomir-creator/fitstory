@@ -2,7 +2,6 @@
 (function(){
 'use strict';
 const byId=id=>document.getElementById(id);
-const number=v=>Number.isFinite(Number(v))?Number(v):null;
 function sample(points,limit=480){
   if(points.length<=limit)return points;
   const result=[];const buckets=Math.max(1,Math.floor(limit/2));
@@ -83,6 +82,22 @@ function hevyRecords(buffer){
   if(!points.length)throw Error('JSON neobsahuje použitelná měření tepu');
   return {points,date:typeof json.start_time==='string'?json.start_time.slice(0,10):null};
 }
+function tcxRecords(buffer){
+  const xml=new DOMParser().parseFromString(new TextDecoder().decode(buffer),'application/xml');
+  if(xml.querySelector('parsererror'))throw Error('Neplatné XML v TCX');
+  const nodes=[...xml.getElementsByTagName('Trackpoint')];
+  const raw=[];
+  for(const node of nodes){
+    const time=node.getElementsByTagName('Time')[0]?.textContent;
+    const hr=node.getElementsByTagName('Value')[0]?.textContent;
+    const ms=Date.parse(time),bpm=Number(hr);
+    if(Number.isFinite(ms)&&Number.isFinite(bpm)&&bpm>=30&&bpm<=240)raw.push([ms,bpm]);
+  }
+  if(raw.length<2)throw Error('TCX neobsahuje průběh tepu');
+  raw.sort((a,b)=>a[0]-b[0]);
+  const start=raw[0][0];
+  return {points:raw.map(([ms,bpm])=>[Math.round((ms-start)/1000),bpm]),date:new Date(start).toISOString().slice(0,10)};
+}
 function aggregate(record,source){
   const points=sample(record.points);
   const bpm=record.points.map(p=>p[1]);
@@ -90,20 +105,20 @@ function aggregate(record,source){
 }
 function chartMarkup(heart){
   if(!heart||!Array.isArray(heart.points)||heart.points.length<2)return '';
-  const points=heart.points.filter(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1]));
+  const points=heart.points.filter(p=>Array.isArray(p)&&Number.isFinite(p[0])&&Number.isFinite(p[1])&&p[0]>=0&&p[1]>=30&&p[1]<=240);
   if(points.length<2)return '';
   const w=760,h=240,left=42,right=14,top=18,bottom=32;
   const xmax=Math.max(1,...points.map(p=>p[0])),ymin=Math.max(30,Math.floor(Math.min(...points.map(p=>p[1]))/20)*20-10),ymax=Math.min(240,Math.ceil(Math.max(...points.map(p=>p[1]))/20)*20+10);
   const x=t=>left+t/xmax*(w-left-right),y=hr=>top+(ymax-hr)/(ymax-ymin||1)*(h-top-bottom);
   let path='',previous=null;
   for(const p of points){
-    const gap=previous&&p[0]-previous[0]>Math.max(90,xmax/12);
+    const gap=previous&&p[0]-previous[0]>90;
     path+=(previous&&!gap?'L':'M')+x(p[0]).toFixed(1)+','+y(p[1]).toFixed(1)+' ';
     previous=p;
   }
   const grids=[0,1,2,3,4].map(i=>{const hr=Math.round(ymin+(ymax-ymin)*i/4),yy=y(hr);return '<line x1="'+left+'" y1="'+yy+'" x2="'+(w-right)+'" y2="'+yy+'" stroke="#354638"/><text x="3" y="'+(yy+4)+'" fill="#a4b5a6" font-size="12">'+hr+'</text>'}).join('');
-  const minutes=Math.round(xmax/60);
-  return '<div class="heart-panel"><div class="heart-summary"><strong>Tep během tréninku</strong><span>Min. '+heart.min+' · Prům. '+heart.avg+' · Max. '+heart.max+' tepů/min</span></div>'+
+  const minutes=Math.round(xmax/60);const stats=[heart.min,heart.avg,heart.max].map(v=>Number.isFinite(Number(v))?Math.round(Number(v)):'—');
+  return '<div class="heart-panel"><div class="heart-summary"><strong>Tep během tréninku</strong><span>Min. '+stats[0]+' · Prům. '+stats[1]+' · Max. '+stats[2]+' tepů/min</span></div>'+
     '<svg class="heart-chart" viewBox="0 0 '+w+' '+h+'" role="img" aria-label="Průběh tepové frekvence během '+minutes+' minut">'+grids+
     '<path d="'+path+'" fill="none" stroke="#b4ed63" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>'+
     '<text x="'+left+'" y="'+(h-8)+'" fill="#a4b5a6" font-size="12">0 min</text><text x="'+(w-right)+'" y="'+(h-8)+'" text-anchor="end" fill="#a4b5a6" font-size="12">'+minutes+' min</text></svg>'+
@@ -113,9 +128,9 @@ window.radarHeartChart=chartMarkup;
 async function importFiles(files){
   const status=byId('heartImportStatus');
   if(document.body.classList.contains('guest')){status.textContent='Nejdříve se přihlas do administrace.';return}
-  const selected=Array.from(files).filter(f=>/\.(fit|fit\.gz|json\.gz)$/i.test(f.name));
-  if(!selected.length){status.textContent='Ve výběru nejsou podporované soubory FIT / FIT.GZ / JSON.GZ.';return}
-  const map=new Map((data.activities||[]).map(a=>[String(a.id),a]));
+  const selected=Array.from(files).filter(f=>/\.(fit|fit\.gz|tcx|tcx\.gz|json\.gz)$/i.test(f.name));
+  if(!selected.length){status.textContent='Ve výběru nejsou podporované soubory FIT / FIT.GZ / TCX / JSON.GZ.';return}
+  const map=new Map((data.activities||[]).map(a=>[String(a.id),a]));const modified=[];
   let imported=0,duplicate=0,unmatched=0,old=0,noHr=0,failed=0;
   const errors=[];
   byId('heartImportButton').disabled=true;
@@ -129,15 +144,15 @@ async function importFiles(files){
       if(activity.heartRate?.points?.length){duplicate++;continue}
       try{
         const raw=await unpack(file);
-        const record=/\.json\.gz$/i.test(file.name)?hevyRecords(raw):fitRecords(raw);
+        const record=/\.json\.gz$/i.test(file.name)?hevyRecords(raw):/\.tcx(?:\.gz)?$/i.test(file.name)?tcxRecords(raw):fitRecords(raw);
         if(record.points.length<2){noHr++;continue}
-        activity.heartRate=aggregate(record,file.name.toLowerCase().endsWith('json.gz')?'Hevy JSON':'Strava FIT');
+        modified.push([activity,activity.heartRate]);activity.heartRate=aggregate(record,file.name.toLowerCase().endsWith('json.gz')?'Hevy JSON':/\.tcx(?:\.gz)?$/i.test(file.name)?'Strava TCX':'Strava FIT');
         imported++;
       }catch(e){failed++;if(errors.length<3)errors.push(file.name+': '+e.message)}
       if(i%10===0)await new Promise(resolve=>setTimeout(resolve,0));
     }
     if(imported){
-      try{save()}catch(e){status.textContent='Import se nepodařilo uložit: '+e.message+'. Před dalším pokusem si stáhni zálohu.';return}
+      try{save()}catch(e){for(const [activity,previous] of modified){if(previous===undefined)delete activity.heartRate;else activity.heartRate=previous}status.textContent='Import se nepodařilo uložit: '+e.message+'. Data zůstala beze změny. Zkontroluj volné místo prohlížeče.';return}
     }
     status.textContent='Hotovo: '+imported+' grafů uloženo, '+duplicate+' duplicit, '+unmatched+' bez odpovídající aktivity v CSV, '+old+' starších, '+noHr+' bez tepu, '+failed+' chyb.'+(errors.length?' '+errors.join(' | '):'');
   }finally{byId('heartImportButton').disabled=false}
@@ -146,4 +161,5 @@ byId('heartImportButton')?.addEventListener('click',()=>{
   const files=[...byId('heartFolder').files,...byId('heartFiles').files];
   importFiles(files).catch(e=>{byId('heartImportStatus').textContent='Chyba importu: '+e.message;byId('heartImportButton').disabled=false});
 });
+document.dispatchEvent(new Event('radar:data-changed'));
 })();
