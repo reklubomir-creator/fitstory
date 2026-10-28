@@ -9,6 +9,7 @@ const setStatus=(message)=>{status.textContent=message};
 const config=window.RADAR_FIREBASE_CONFIG;
 if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
   login.hidden=true;
+  document.body.classList.remove('auth-pending');
   setStatus('Cloud zatím není nastavený. Je potřeba připojit vlastní projekt Firebase; místní data zůstávají beze změny.');
 }else{
   try{
@@ -142,5 +143,5 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       }catch(err){setStatus('Nepodařilo se načíst cloud: '+err.message)}
     });
     window.addEventListener('online',()=>{if(pending)flush()});
-  }catch(err){login.hidden=true;setStatus('Nepodařilo se načíst synchronizaci: '+err.message)}
+  }catch(err){login.hidden=true;document.body.classList.remove('auth-pending');setStatus('Nepodařilo se načíst synchronizaci: '+err.message)}
 }
