@@ -199,11 +199,13 @@ function renderStrava(){
       ['Opakování',a.reps==null?null:fmt(a.reps,0)]
     ].filter(x=>x[1]!==null).map(([k,v])=>'<span class="pill">'+escapeHtml(k)+': '+escapeHtml(v)+'</span>').join('');
     const description=String(a.description||'').trim();
+    const hasHeart=!!(a.heartRate&&Array.isArray(a.heartRate.points)&&a.heartRate.points.length>=2);
+    const heartIcon='<span class="hr-availability'+(hasHeart?'':' missing')+'" title="'+(hasHeart?'Graf tepu je k dispozici':'Graf tepu není k dispozici')+'" aria-label="'+(hasHeart?'Graf tepu je k dispozici':'Graf tepu není k dispozici')+'">♥</span>';
     const details='<div class="activity-detail-inner">'+stats+
       (window.radarHeartChart?.(a.heartRate)||'')+(description?'<pre>'+escapeHtml(description)+'</pre>':'<p class="muted">K této aktivitě není v exportu Stravy uveden podrobný popis.</p>')+'</div>';
     return '<tr class="activity-row" data-activity-toggle="'+id+'">'+
       '<td>'+escapeHtml(formatDateCZ(a.date))+'</td>'+
-      '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+escapeHtml(a.name)+'</button></td>'+
+      '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+heartIcon+escapeHtml(a.name)+'</button></td>'+
       '<td>'+escapeHtml(activityKind(a))+'</td>'+
       '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
       '<td>'+(activityDistanceMeters(a)==null?'—':fmt(activityDistanceMeters(a)/1000,2))+'</td>'+
@@ -225,7 +227,7 @@ document.getElementById('stravaRows').addEventListener('click',e=>{
   const expanded=detail.style.display==='none';
   detail.style.display=expanded?'table-row':'none';
   button.setAttribute('aria-expanded',String(expanded));
-  button.textContent=(expanded?'▾ ':'▸ ')+button.textContent.slice(2);
+  const first=button.firstChild;if(first&&first.nodeType===3)first.textContent=expanded?'▾ ':'▸ ';
 });
 document.querySelectorAll('[data-page]').forEach(b=>b.addEventListener('click',()=>{if(b.dataset.page==='strava')renderStrava()}));
 document.getElementById('stravaLoad').addEventListener('click',async()=>{
