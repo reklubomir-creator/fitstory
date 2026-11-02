@@ -140,9 +140,9 @@ hevyForm.elements.heart.onchange=async e=>{const file=e.target.files[0];$('#hear
 function hevyMetrics(text){
   const number=s=>Number(String(s).replace(',','.'));
   const find=patterns=>{for(const re of patterns){const m=text.match(re);if(m){const n=number(m[1]);if(Number.isFinite(n))return n}}return null};
-  const avg=find([/(?:průměr(?:ná|ný)?|average|avg)\\s*(?:srdeční\\s*)?(?:tep(?:ová frekvence)?|heart rate|bpm)\\s*[:：-]?\\s*(\\d{2,3})/i,/(?:avg\\.?\\s*heart rate)\\s*[:：-]?\\s*(\\d{2,3})/i]);
-  const max=find([/(?:maximální|maximum|max\\.?|nejvyšší)\\s*(?:srdeční\\s*)?(?:tep(?:ová frekvence)?|heart rate|bpm)\\s*[:：-]?\\s*(\\d{2,3})/i]);
-  const kcal=find([/(?:aktivní\\s*)?(?:energie|kalorie|calories|kcal)\\s*[:：-]?\\s*(\\d{2,4})\\s*(?:kcal)?/i,/(\\d{2,4})\\s*kcal/i]);
+  const avg=find([/(?:průměr(?:ná|ný)?|average|avg)\s*(?:srdeční\s*)?(?:tep(?:ová frekvence)?|heart rate|bpm)\s*[:：-]?\s*(\d{2,3})/i,/(?:avg\.?\s*heart rate)\s*[:：-]?\s*(\d{2,3})/i]);
+  const max=find([/(?:maximální|maximum|max\.?|nejvyšší)\s*(?:srdeční\s*)?(?:tep(?:ová frekvence)?|heart rate|bpm)\s*[:：-]?\s*(\d{2,3})/i]);
+  const kcal=find([/(?:aktivní\s*)?(?:energie|kalorie|calories|kcal)\s*[:：-]?\s*(\d{2,4})\s*(?:kcal)?/i,/(\d{2,4})\s*kcal/i]);
   return {avgHeartRate:avg>=35&&avg<=230?avg:null,maxHeartRate:max>=35&&max<=250?max:null,calories:kcal>=0&&kcal<=5000?kcal:null};
 }
 async function hevyReadHeart(file){
@@ -161,9 +161,9 @@ hevyForm.onsubmit=async e=>{
   try{
     const raw=hevyForm.elements.hevy.value.trim(),date=hevyForm.elements.date.value;
     if(!validISODate(date)||!raw)throw Error('Vyplň platné datum a text exportu.');
-    const lines=raw.split(/\\r?\\n/);
-    const title=(lines.find(s=>s.trim()&&!/^https?:\\/\\//i.test(s.trim()))||'Trénink Hevy').trim().slice(0,90);
-    const setLines=lines.filter(s=>/^\\s*(?:\\d+\\s*[x×]|(?:set|série)\\s*\\d+|\\d+\\s*[-.]\\s*\\d+\\s*(?:kg|lb))/i.test(s));
+    const lines=raw.split(/\r?\n/);
+    const title=(lines.find(s=>s.trim()&&!/^https?:\/\//i.test(s.trim()))||'Trénink Hevy').trim().slice(0,90);
+    const setLines=lines.filter(s=>/^\s*(?:\d+\s*[x×]|(?:set|série)\s*\d+|\d+\s*[-.]\s*\d+\s*(?:kg|lb))/i.test(s));
     const heart=await hevyReadHeart(hevyForm.elements.heart.files[0]);
     const duplicate=data.activities.find(a=>a.source==='Hevy import'&&a.date===date&&a.name===title);
     const activity={id:duplicate?.id||'hevy-'+date+'-'+Date.now(),date,name:title,type:'WeightTraining',description:raw,source:'Hevy import',sets:setLines.length||null,heartImage:heart.image,...heart.metrics};
@@ -259,4 +259,4 @@ window.radarPublicRender=function(snapshot){
   try{draw('#overviewChart')}finally{data=previous}
 };
 // Paint the last successfully loaded public data before Firebase reconnects.
-</script><script src="strava.js?v=0.3.53"></script><script src="heart-rate.js?v=0.3.49"></script><script>if(window.radarPublicSnapshot)window.radarPublicRender(window.radarPublicSnapshot);</script><script src="firebase-config.js?v=0.3.25"></script><script type="module" src="cloud-sync.js?v=0.3.47"></script><script src="analytics.js?v=0.3.55" defer></script><script>/* 0.3.56: Never trap visitors behind the auth splash when cloud authentication stalls. This does not grant owner access. */setTimeout(function(){if(document.body.classList.contains('auth-pending')){document.body.classList.remove('auth-pending');console.warn('RADAR: authentication timeout; showing read-only page');}},8000);</script></body></html>
+</script><script src="strava.js?v=0.3.53"></script><script src="heart-rate.js?v=0.3.49"></script><script>if(window.radarPublicSnapshot)window.radarPublicRender(window.radarPublicSnapshot);</script><script src="firebase-config.js?v=0.3.25"></script><script type="module" src="cloud-sync.js?v=0.3.47"></script><script src="analytics.js?v=0.3.55" defer></script><script>/* 0.3.57: Fix JavaScript parse error in Hevy import regex; retain authentication timeout fallback. */setTimeout(function(){if(document.body.classList.contains('auth-pending')){document.body.classList.remove('auth-pending');console.warn('RADAR: authentication timeout; showing read-only page');}},8000);</script></body></html>
