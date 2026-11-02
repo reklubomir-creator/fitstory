@@ -152,11 +152,51 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(requestId===stravaTestRequest)stravaTestButton.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
     };
+    const stravaConnectButton=btn('stravaConnectButton');
+    const stravaConnectStatus=btn('stravaConnectStatus');
+    const stravaConnectEndpoint='https://europe-west1-radarfit-25e17.cloudfunctions.net/stravaConnect';
+    let stravaConnectRequest=0;
+    stravaConnectButton.onclick=async()=>{
+      const currentUser=auth.currentUser;
+      if(!currentUser||currentUser.uid!==OWNER_UID){
+        stravaConnectStatus.textContent='Nejdřív se přihlas jako administrátor.';
+        return;
+      }
+      const requestId=++stravaConnectRequest;
+      stravaConnectButton.disabled=true;
+      stravaConnectStatus.textContent='Připravuji bezpečné přesměrování na Stravu…';
+      try{
+        const idToken=await currentUser.getIdToken();
+        if(requestId!==stravaConnectRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        const response=await fetch(stravaConnectEndpoint,{
+          method:'POST',
+          headers:{'Authorization':'Bearer '+idToken,'Content-Type':'application/json'},
+          body:'{}',
+          cache:'no-store'
+        });
+        const result=await response.json();
+        if(requestId!==stravaConnectRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        if(!response.ok)throw Error('HTTP '+response.status+': '+String(result.error||'Server odmítl požadavek'));
+        const url=new URL(result.url);
+        if(url.origin!=='https://www.strava.com'||url.pathname!=='/oauth/authorize'||url.searchParams.get('client_id')!=='293370'){
+          throw Error('Server vrátil neočekávanou adresu autorizace.');
+        }
+        stravaConnectStatus.textContent='Přesměrovávám na Stravu…';
+        window.location.assign(url.href);
+      }catch(err){
+        if(requestId===stravaConnectRequest&&auth.currentUser?.uid===OWNER_UID)stravaConnectStatus.textContent='Propojení se nepodařilo zahájit: '+err.message;
+      }finally{
+        if(requestId===stravaConnectRequest)stravaConnectButton.disabled=auth.currentUser?.uid!==OWNER_UID;
+      }
+    };
     btn('cloudSignOut').onclick=()=>signOut(auth);
     btn('cloudUpload').onclick=upload;
     btn('cloudDownload').onclick=download;
     onAuthStateChanged(auth,async u=>{
       ++stravaTestRequest;
+      ++stravaConnectRequest;
+      stravaConnectButton.disabled=true;
+      stravaConnectStatus.textContent="Pro propojení se přihlas do administrace.";
       stravaTestButton.disabled=true;
       stravaTestStatus.textContent='Pro test se přihlas do administrace.';
       if(unsubscribe){unsubscribe();unsubscribe=null}
@@ -166,6 +206,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       if(u.uid!==OWNER_UID){window.radarAdminSetOwner?.(false);setStatus('Tento účet nemá oprávnění spravovat RADAR.');await signOut(auth);return}
       window.radarAdminSetOwner?.(true);
       stravaTestButton.disabled=false;
+      stravaConnectButton.disabled=false;
+      stravaConnectStatus.textContent="Připraveno k propojení Stravy.";
       stravaTestStatus.textContent='Připraveno k ověření přístupu.';
       btn('cloudPassword').value='';
       btn('cloudUser').textContent='Přihlášený účet: '+(u.email||u.uid);
