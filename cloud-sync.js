@@ -117,16 +117,56 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       catch(err){setStatus('Přihlášení selhalo: '+err.message)}
     };
 
+    const stravaTestButton=btn('stravaAdminTest');
+    const stravaTestStatus=btn('stravaAdminTestStatus');
+    const stravaTestEndpoint='https://europe-west1-radarfit-25e17.cloudfunctions.net/stravaAdminCheck';
+    let stravaTestRequest=0;
+    stravaTestButton.onclick=async()=>{
+      const currentUser=auth.currentUser;
+      if(!currentUser||currentUser.uid!==OWNER_UID){
+        stravaTestStatus.textContent='Nejdřív se přihlas jako administrátor.';
+        return;
+      }
+      const requestId=++stravaTestRequest;
+      stravaTestButton.disabled=true;
+      stravaTestStatus.textContent='Ověřuji přístup k serveru…';
+      try{
+        const idToken=await currentUser.getIdToken();
+        if(requestId!==stravaTestRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        const response=await fetch(stravaTestEndpoint,{
+          method:'POST',
+          headers:{'Authorization':'Bearer '+idToken,'Content-Type':'application/json'},
+          body:'{}',
+          cache:'no-store'
+        });
+        const result=await response.json();
+        if(requestId!==stravaTestRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        if(response.ok&&result.success===true&&result.stravaClientId==='293370'){
+          stravaTestStatus.textContent='Přístup administrátora ověřen (HTTP '+response.status+'). Strava OAuth zatím není propojené.';
+        }else{
+          stravaTestStatus.textContent='Ověření neprošlo (HTTP '+response.status+'): '+String(result.error||'Neznámá odpověď serveru');
+        }
+      }catch(err){
+        if(requestId===stravaTestRequest&&auth.currentUser?.uid===OWNER_UID)stravaTestStatus.textContent='Server není dostupný: '+err.message;
+      }finally{
+        if(requestId===stravaTestRequest)stravaTestButton.disabled=auth.currentUser?.uid!==OWNER_UID;
+      }
+    };
     btn('cloudSignOut').onclick=()=>signOut(auth);
     btn('cloudUpload').onclick=upload;
     btn('cloudDownload').onclick=download;
     onAuthStateChanged(auth,async u=>{
+      ++stravaTestRequest;
+      stravaTestButton.disabled=true;
+      stravaTestStatus.textContent='Pro test se přihlas do administrace.';
       if(unsubscribe){unsubscribe();unsubscribe=null}
       user=u;active=false;pending=false;clearTimeout(writeTimer);
       login.hidden=!!u;logged.hidden=!u;
       if(!u){window.radarAdminSetOwner?.(false);setStatus('Veřejný přehled je dostupný bez přihlášení. Pro úpravy se přihlas.');return}
       if(u.uid!==OWNER_UID){window.radarAdminSetOwner?.(false);setStatus('Tento účet nemá oprávnění spravovat RADAR.');await signOut(auth);return}
       window.radarAdminSetOwner?.(true);
+      stravaTestButton.disabled=false;
+      stravaTestStatus.textContent='Připraveno k ověření přístupu.';
       btn('cloudPassword').value='';
       btn('cloudUser').textContent='Přihlášený účet: '+(u.email||u.uid);
       setStatus('Kontroluji cloudová data…');
