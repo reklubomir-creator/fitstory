@@ -112,10 +112,22 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       pending=true;setStatus('Ukládám změny…');
       clearTimeout(writeTimer);writeTimer=setTimeout(flush,800);
     };
-    btn('cloudSignIn').onclick=async()=>{
-      try{await signInWithEmailAndPassword(auth,btn('cloudEmail').value.trim(),btn('cloudPassword').value)}
-      catch(err){setStatus('Přihlášení selhalo: '+err.message)}
+    const signInButton=btn('cloudSignIn');
+    signInButton.onclick=async()=>{
+      const email=btn('cloudEmail').value.trim(),password=btn('cloudPassword').value;
+      if(!email||!password){setStatus('Vyplň e-mail i heslo.');return}
+      signInButton.disabled=true;
+      setStatus('Přihlašuji k Firebase…');
+      try{
+        await signInWithEmailAndPassword(auth,email,password);
+        setStatus('Přihlášení ověřeno. Načítám administraci…');
+      }catch(err){
+        setStatus('Přihlášení selhalo ('+(err.code||'neznámá chyba')+'): '+err.message);
+      }finally{signInButton.disabled=false}
     };
+    for(const field of ['cloudEmail','cloudPassword']){
+      btn(field).addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();signInButton.click()}});
+    }
 
     const stravaTestButton=btn('stravaAdminTest');
     const stravaTestStatus=btn('stravaAdminTestStatus');
