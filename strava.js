@@ -236,9 +236,9 @@ function renderStrava(){
       '<td>'+formatDuration(a.movingSeconds??a.elapsedSeconds)+'</td>'+
       '<td>'+(activityDistanceMeters(a)==null?'—':fmt(activityDistanceMeters(a)/1000,2))+'</td>'+
       '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
-      '<td>'+(a.calories==null?'—':fmt(a.calories,0))+'</td>'+
+
       '<td>'+(api.length?'Strava API':'<button class="delete" data-strava-del="'+id+'">Smazat</button>')+'</td></tr>'+
-      '<tr class="activity-detail" data-detail-for="'+id+'" style="display:none"><td colspan="8">'+details+'</td></tr>';
+      '<tr class="activity-detail" data-detail-for="'+id+'" style="display:none"><td colspan="7">'+details+'</td></tr>';
   }).join('');
 }
 document.getElementById('stravaYear').addEventListener('change',renderStrava);
