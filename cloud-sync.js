@@ -229,6 +229,64 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           if(Array.isArray(a.heartRateStream?.bpm))parts.push('Tepová křivka: '+a.heartRateStream.bpm.length+' bodů');
           detail.textContent=parts.join(' · ');
           item.appendChild(detail);
+          const panel=document.createElement('div');
+          panel.hidden=true;
+          panel.style.cssText='padding:12px 0';
+          const description=document.createElement('p');
+          description.style.whiteSpace='pre-wrap';
+          description.textContent=a.description||'Popis aktivity zatím není importovaný. Pro jeho získání bude potřeba rozšířit serverovou synchronizaci.';
+          panel.appendChild(description);
+          const times=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
+          if(Array.isArray(times)&&Array.isArray(bpm)&&times.length&&bpm.length){
+            const n=Math.min(times.length,bpm.length);
+            const pairs=[];
+            for(let i=0;i<n;i++)if(Number.isFinite(Number(times[i]))&&Number.isFinite(Number(bpm[i])))pairs.push([Number(times[i]),Number(bpm[i])]);
+            if(pairs.length>1){
+              const title=document.createElement('strong');
+              title.textContent='Tepová křivka';
+              panel.appendChild(title);
+              const svgNS='http://www.w3.org/2000/svg';
+              const svg=document.createElementNS(svgNS,'svg');
+              svg.setAttribute('viewBox','0 0 640 180');
+              svg.setAttribute('role','img');
+              svg.setAttribute('aria-label','Graf tepové frekvence v průběhu aktivity');
+              svg.style.cssText='display:block;width:100%;max-width:720px;height:auto;margin-top:8px';
+              const minT=pairs[0][0],maxT=pairs[pairs.length-1][0];
+              const minB=Math.floor(Math.min(...pairs.map(p=>p[1]))/10)*10;
+              const maxB=Math.ceil(Math.max(...pairs.map(p=>p[1]))/10)*10;
+              const x=t=>40+560*(t-minT)/Math.max(1,maxT-minT);
+              const y=v=>150-125*(v-minB)/Math.max(1,maxB-minB);
+              for(const value of [minB,Math.round((minB+maxB)/2),maxB]){
+                const label=document.createElementNS(svgNS,'text');
+                label.setAttribute('x','4');label.setAttribute('y',String(y(value)+4));
+                label.setAttribute('font-size','13');label.setAttribute('fill','currentColor');
+                label.textContent=String(value);
+                svg.appendChild(label);
+              }
+              const path=document.createElementNS(svgNS,'polyline');
+              path.setAttribute('points',pairs.map(p=>x(p[0]).toFixed(1)+','+y(p[1]).toFixed(1)).join(' '));
+              path.setAttribute('fill','none');path.setAttribute('stroke','#e65c48');
+              path.setAttribute('stroke-width','2');path.setAttribute('stroke-linejoin','round');
+              svg.appendChild(path);
+              panel.appendChild(svg);
+              const timeLabel=document.createElement('div');
+              timeLabel.className='muted tiny';
+              timeLabel.textContent='Čas od začátku aktivity: '+Math.round(minT/60)+'–'+Math.round(maxT/60)+' min · Tep (bpm)';
+              panel.appendChild(timeLabel);
+            }
+          }
+          const toggle=document.createElement('button');
+          toggle.type='button';
+          toggle.textContent='Zobrazit detail';
+          toggle.setAttribute('aria-expanded','false');
+          toggle.style.marginTop='6px';
+          toggle.onclick=()=>{
+            panel.hidden=!panel.hidden;
+            toggle.textContent=panel.hidden?'Zobrazit detail':'Skrýt detail';
+            toggle.setAttribute('aria-expanded',String(!panel.hidden));
+          };
+          item.appendChild(toggle);
+          item.appendChild(panel);
           stravaActivityList.appendChild(item);
         }
       }catch(err){
