@@ -171,6 +171,15 @@ function renderStrava(){
   // API records are the read-only source of truth for the owner view.
   // Keep legacy activities untouched for backup and historical heart-rate fallback.
   const api=Array.isArray(window.radarApiActivities)?window.radarApiActivities:[];
+  if(!document.body.classList.contains('guest')&&!Array.isArray(window.radarApiActivities)){
+    document.getElementById('stravaCount').textContent='Načítám…';
+    document.getElementById('stravaDistance').textContent='—';
+    document.getElementById('stravaHours').textContent='—';
+    document.getElementById('stravaTypes').textContent='—';
+    document.getElementById('stravaBreakdown').textContent='';
+    document.getElementById('stravaRows').innerHTML='<tr><td colspan="7">Načítám aktuální aktivity ze Stravy…</td></tr>';
+    return;
+  }
   const all=api.length?api.map(a=>{
     const date=String(a.startDate||'').slice(0,10);
     const original=legacy.find(b=>String(b.id)===String(a.id));
