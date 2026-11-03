@@ -340,7 +340,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         }
       }
       const rate=points.map(x=>x[1]);
-      const average=Number(a.averageHeartrate),maximum=Number(a.maxHeartrate);
+      const average=a.averageHeartrate==null?NaN:Number(a.averageHeartrate),maximum=a.maxHeartrate==null?NaN:Number(a.maxHeartrate);
       const heartRate=points.length>1?{
         points,min:Math.min(...rate),
         avg:Number.isFinite(average)?average:rate.reduce((x,y)=>x+y,0)/rate.length,
@@ -362,7 +362,9 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       if(auth.currentUser?.uid!==OWNER_UID)return;
       const list=activities.map(publicStravaActivity).filter(Boolean);
       if(!list.length)return;
-      const current=publicSnapshot||{};
+      const snapshot=await get(publicRef);
+      const current=snapshot.val();
+      if(!current||!Array.isArray(current.weights))throw Error('Veřejný přehled nemá platná data; publikace Stravy byla bezpečně zastavena.');
       // Preserve existing weights, legacy exercise list, and all unrelated public fields.
       // Never publish private route geometry, location coordinates, or raw Strava descriptions.
       await set(publicRef,{...current,stravaExerciseList:list,stravaExerciseUpdatedAt:new Date().toISOString()});
