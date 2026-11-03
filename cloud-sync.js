@@ -251,15 +251,16 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       }
       if(names.includes(old))select.value=old;
       const fmt=n=>n.toLocaleString('cs-CZ',{maximumFractionDigits:1});
+      const fmtDate=iso=>/^\d{4}-\d{2}-\d{2}$/.test(iso)?iso.slice(8,10)+'.'+iso.slice(5,7)+'.'+iso.slice(0,4):iso;
       const draw=()=>{
         output.replaceChildren();
         const items=(records.get(select.value)||[]).sort((a,b)=>a.day.localeCompare(b.day)||a.id.localeCompare(b.id));
         if(!items.length){output.textContent='Pro tento cvik nejsou dostupné záznamy s váhou a opakováními.';return;}
-        if(items.length<2){output.textContent='Zatím je dostupný jen jeden trénink tohoto cviku ('+items[0].day+'). Pro porovnání jsou potřeba alespoň dva.';return;}
+        if(items.length<2){output.textContent='Zatím je dostupný jen jeden trénink tohoto cviku ('+fmtDate(items[0].day)+'). Pro porovnání jsou potřeba alespoň dva.';return;}
         const first=items[0],last=items[items.length-1];
         const table=document.createElement('table');table.style.width='100%';
         for(const values of [
-          ['Ukazatel','První: '+first.day,'Poslední: '+last.day],
+          ['Ukazatel','První: '+fmtDate(first.day),'Poslední: '+fmtDate(last.day)],
           ['Nejvyšší pracovní váha',fmt(first.max)+' kg',fmt(last.max)+' kg'],
           ['Série',String(first.sets.length),String(last.sets.length)],
           ['Objem (kg × opakování)',fmt(first.volume)+' kg',fmt(last.volume)+' kg'],
@@ -301,13 +302,13 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           add('line',{x1:margin.left,y1:py,x2:700-margin.right,y2:py,stroke:'currentColor','stroke-opacity':'.16'});
           add('text',{x:margin.left-9,y:py+4,'text-anchor':'end',fill:'currentColor','font-size':12},fmt(value));
         }
-        add('text',{x:margin.left,y:248,fill:'currentColor','font-size':12},items[0].day);
-        add('text',{x:700-margin.right,y:248,'text-anchor':'end',fill:'currentColor','font-size':12},items[items.length-1].day);
+        add('text',{x:margin.left,y:248,fill:'currentColor','font-size':12},fmtDate(items[0].day));
+        add('text',{x:700-margin.right,y:248,'text-anchor':'end',fill:'currentColor','font-size':12},fmtDate(items[items.length-1].day));
         add('polyline',{points:items.map((e,i)=>x(i).toFixed(1)+','+y(e.max).toFixed(1)).join(' '),fill:'none',stroke:'#b4ed63','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
         for(let i=0;i<items.length;i++){
           const point=add('circle',{cx:x(i),cy:y(items[i].max),r:4,fill:'#b4ed63',stroke:'#17231b','stroke-width':1});
           const tooltip=document.createElementNS(svgNS,'title');
-          tooltip.textContent=items[i].day+': '+fmt(items[i].max)+' kg; '+items[i].sets.length+' sérií';
+          tooltip.textContent=fmtDate(items[i].day)+': +fmt(items[i].max)+' kg; '+items[i].sets.length+' sérií';
           point.appendChild(tooltip);
         }
         output.appendChild(svg);
