@@ -189,6 +189,56 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(requestId===stravaConnectRequest)stravaConnectButton.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
     };
+    const stravaRefreshList=btn('stravaRefreshList');
+    const stravaListStatus=btn('stravaListStatus');
+    const stravaActivityList=btn('stravaActivityList');
+    let stravaListRequest=0;
+    async function loadStravaActivities(){
+      const requestId=++stravaListRequest;
+      const uid=auth.currentUser?.uid;
+      if(uid!==OWNER_UID)return;
+      stravaRefreshList.disabled=true;
+      stravaListStatus.textContent='Načítám uložené aktivity…';
+      try{
+        const snapshot=await get(ref(db,'users/'+OWNER_UID+'/stravaActivities'));
+        if(requestId!==stravaListRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        const values=snapshot.val()||{};
+        const activities=Object.values(values).filter(x=>x&&typeof x==='object')
+          .sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
+        stravaActivityList.replaceChildren();
+        stravaListStatus.textContent=activities.length?
+          'Uloženo '+activities.length+' aktivit. Zobrazuji nejnovějších '+Math.min(activities.length,30)+'.':
+          'Zatím nejsou uložené žádné aktivity.';
+        const dateFormat=new Intl.DateTimeFormat('cs-CZ',{dateStyle:'medium',timeStyle:'short'});
+        for(const a of activities.slice(0,30)){
+          const item=document.createElement('div');
+          item.style.cssText='padding:10px 0;border-bottom:1px solid var(--line,#ddd)';
+          const heading=document.createElement('strong');
+          let date='Datum neuvedeno';
+          const parsed=new Date(a.startDate);
+          if(Number.isFinite(parsed.getTime()))date=dateFormat.format(parsed);
+          heading.textContent=date+' · '+String(a.name||a.sportType||a.type||'Aktivita');
+          item.appendChild(heading);
+          const detail=document.createElement('div');
+          detail.className='muted tiny';
+          const parts=[String(a.sportType||a.type||'Neurčeno')];
+          if(Number(a.movingTime)>0)parts.push('Čas '+Math.round(Number(a.movingTime)/60)+' min');
+          if(Number(a.distance)>0)parts.push('Vzdálenost '+(Number(a.distance)/1000).toLocaleString('cs-CZ',{maximumFractionDigits:2})+' km');
+          if(Number.isFinite(a.averageHeartrate))parts.push('Průměrný tep '+a.averageHeartrate+' bpm');
+          if(Number.isFinite(a.maxHeartrate))parts.push('Max. tep '+a.maxHeartrate+' bpm');
+          if(Array.isArray(a.heartRateStream?.bpm))parts.push('Tepová křivka: '+a.heartRateStream.bpm.length+' bodů');
+          detail.textContent=parts.join(' · ');
+          item.appendChild(detail);
+          stravaActivityList.appendChild(item);
+        }
+      }catch(err){
+        if(requestId===stravaListRequest&&auth.currentUser?.uid===OWNER_UID)
+          stravaListStatus.textContent='Načtení aktivit selhalo: '+err.message;
+      }finally{
+        if(requestId===stravaListRequest)stravaRefreshList.disabled=auth.currentUser?.uid!==OWNER_UID;
+      }
+    }
+    stravaRefreshList.onclick=loadStravaActivities;
     const stravaSyncButton=btn('stravaSyncButton');
     const stravaSyncStatus=btn('stravaSyncStatus');
     let stravaSyncRequest=0;
@@ -212,6 +262,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(requestId!==stravaSyncRequest||auth.currentUser?.uid!==OWNER_UID)return;
         if(!response.ok)throw Error('HTTP '+response.status+': '+String(result.error||'Synchronizace selhala'));
         stravaSyncStatus.textContent='Synchronizace dokončena: '+result.imported+' aktivit, '+result.withHeartRate+' s tepovou křivkou'+(result.streamErrors?' ('+result.streamErrors+' chyb načtení tepu)':'')+'.';
+        await loadStravaActivities();
       }catch(err){
         if(requestId===stravaSyncRequest&&auth.currentUser?.uid===OWNER_UID)
           stravaSyncStatus.textContent='Synchronizace se nezdařila: '+err.message;
@@ -226,6 +277,10 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       ++stravaTestRequest;
       ++stravaConnectRequest;
       ++stravaSyncRequest;
+      ++stravaListRequest;
+      stravaRefreshList.disabled=true;
+      stravaActivityList.replaceChildren();
+      stravaListStatus.textContent='Přihlas se pro načtení aktivit.';
       stravaSyncButton.disabled=true;
       stravaSyncStatus.textContent="Pro synchronizaci se přihlas do administrace.";
       stravaConnectButton.disabled=true;
@@ -241,6 +296,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       stravaTestButton.disabled=false;
       stravaConnectButton.disabled=false;
       stravaSyncButton.disabled=false;
+      stravaRefreshList.disabled=false;
+      void loadStravaActivities();
       stravaSyncStatus.textContent="Připraveno k synchronizaci aktivit ze Stravy.";
       stravaConnectStatus.textContent="Připraveno k propojení Stravy.";
       stravaTestStatus.textContent='Připraveno k ověření přístupu.';
