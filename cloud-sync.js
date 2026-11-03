@@ -538,8 +538,13 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           stravaActivityList.appendChild(pagination);
         }
       }catch(err){
-        if(requestId===stravaListRequest&&auth.currentUser?.uid===OWNER_UID)
+        if(requestId===stravaListRequest&&auth.currentUser?.uid===OWNER_UID){
+          window.radarApiActivities=[];
+          document.dispatchEvent(new Event('radar:data-changed'));
           stravaListStatus.textContent='Načtení aktivit selhalo: '+err.message;
+          const rows=document.getElementById('stravaRows');
+          if(rows)rows.innerHTML='<tr><td colspan="7">Načtení Stravy selhalo. Zkus obnovit seznam v administraci.</td></tr>';
+        }
       }finally{
         if(requestId===stravaListRequest)stravaRefreshList.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
