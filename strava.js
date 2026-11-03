@@ -222,10 +222,11 @@ function renderStrava(){
   }).filter(a=>/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&a.date>='2026-05-25'):legacy;
   const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
   if(!yearSelect||!typeSelect)return;
-  const selectedYear=yearSelect.value,selectedType=typeSelect.value;
-  const years=[...new Set(all.map(x=>x.date.slice(0,4)))].sort().reverse();
-  yearSelect.innerHTML='<option value="all">Všechny roky</option>'+years.map(y=>'<option value="'+escapeHtml(y)+'">'+escapeHtml(y)+'</option>').join('');
-  yearSelect.value=years.includes(selectedYear)?selectedYear:'all';
+  const selectedMonth=yearSelect.value,selectedType=typeSelect.value;
+  const months=[...new Set(all.map(x=>x.date.slice(0,7)))].sort().reverse();
+  const monthLabel=ym=>new Date(ym+'-01T12:00:00').toLocaleDateString('cs-CZ',{month:'long',year:'numeric'});
+  yearSelect.innerHTML='<option value="all">Všechny měsíce</option>'+months.map(m=>'<option value="'+escapeHtml(m)+'">'+escapeHtml(monthLabel(m))+'</option>').join('');
+  yearSelect.value=months.includes(selectedMonth)?selectedMonth:'all';
   const inYear=all.filter(x=>yearSelect.value==='all'||x.date.startsWith(yearSelect.value));
   const typesAvailable=[...new Set(inYear.map(activityKind))].sort((a,b)=>a.localeCompare(b,'cs'));
   typeSelect.innerHTML='<option value="all">Všechny aktivity</option>'+typesAvailable.map(t=>'<option value="'+escapeHtml(t)+'">'+escapeHtml(t)+'</option>').join('');
