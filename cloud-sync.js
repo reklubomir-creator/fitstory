@@ -194,6 +194,22 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     const stravaActivityList=btn('stravaActivityList');
     let stravaListRequest=0;
     let stravaPage=0;
+    function parseHevyDescription(raw){
+      const clean=String(raw||'').replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/\r/g,'');
+      const exercises=[];
+      let current=null;
+      for(const line of clean.split('\n')){
+        const value=line.trim();
+        if(!value||/^Logged with hevyapp\.com/i.test(value))continue;
+        if(/^Set\s*\d+\s*:/i.test(value)){
+          if(current)current.sets.push(value);
+        }else if(!/^https?:\/\//i.test(value)){
+          current={name:value,sets:[]};
+          exercises.push(current);
+        }
+      }
+      return {clean,exercises:exercises.filter(e=>e.sets.length)};
+    }
     async function loadStravaActivities(){
       const requestId=++stravaListRequest;
       const uid=auth.currentUser?.uid;
@@ -238,7 +254,28 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           panel.style.cssText='padding:12px 0';
           const description=document.createElement('p');
           description.style.whiteSpace='pre-wrap';
-          description.textContent=a.description||'Popis aktivity zatím není importovaný. Pro jeho získání bude potřeba rozšířit serverovou synchronizaci.';
+          const hevy=parseHevyDescription(a.description);
+          description.textContent=hevy.clean||'Popis aktivity není dostupný.';
+          if(hevy.exercises.length){
+            const heading=document.createElement('strong');
+            heading.textContent='Cviky a série z Hevy ('+hevy.exercises.length+' položek)';
+            panel.appendChild(heading);
+            const table=document.createElement('table');
+            table.style.cssText='width:100%;margin:8px 0 14px;border-collapse:collapse';
+            const body=document.createElement('tbody');
+            for(const exercise of hevy.exercises){
+              const row=document.createElement('tr');
+              const name=document.createElement('td');
+              name.textContent=exercise.name;
+              name.style.cssText='vertical-align:top;padding:7px 10px 7px 0;font-weight:600';
+              const sets=document.createElement('td');
+              sets.style.cssText='padding:7px 0;white-space:pre-line';
+              sets.textContent=exercise.sets.join('\\n');
+              row.append(name,sets);body.appendChild(row);
+            }
+            table.appendChild(body);panel.appendChild(table);
+            description.hidden=true;
+          }
           panel.appendChild(description);
           const times=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
           if(Array.isArray(times)&&Array.isArray(bpm)&&times.length&&bpm.length){
