@@ -193,6 +193,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     const stravaListStatus=btn('stravaListStatus');
     const stravaActivityList=btn('stravaActivityList');
     let stravaListRequest=0;
+    let stravaPublishRequested=false;
     let stravaPage=0;
     function parseHevyDescription(raw){
       const clean=String(raw||'').replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/\r/g,'');
@@ -329,7 +330,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       const points=[];
       if(Array.isArray(times)&&Array.isArray(bpm)){
         const count=Math.min(times.length,bpm.length);
-        const stride=Math.max(1,Math.ceil(count/300));
+        const stride=Math.max(1,Math.ceil(count/120));
         for(let i=0;i<count;i+=stride){
           const t=Number(times[i]),v=Number(bpm[i]);
           if(Number.isFinite(t)&&Number.isFinite(v)&&t>=0&&v>=30&&v<=240)points.push([t,v]);
@@ -382,10 +383,13 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         const activities=Object.values(values).filter(x=>x&&typeof x==='object')
           .sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
         renderExerciseComparison(activities);
-        try{
-          await publishStravaExercises(activities);
-        }catch(publicError){
-          console.warn('Zveřejnění souhrnu Stravy se nezdařilo:',publicError);
+        // Avoid blocking login and list rendering with public database writes.
+        if(stravaPublishRequested){
+          stravaPublishRequested=false;
+          void publishStravaExercises(activities).catch(publicError=>{
+            console.warn('Zveřejnění souhrnu Stravy se nezdařilo:',publicError);
+            stravaListStatus.textContent+=' · Zveřejnění selhalo: '+publicError.message;
+          });
         }
         stravaActivityList.replaceChildren();
         const pageSize=10;
@@ -517,7 +521,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(requestId===stravaListRequest)stravaRefreshList.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
     }
-    stravaRefreshList.onclick=loadStravaActivities;
+    stravaRefreshList.onclick=()=>{stravaPublishRequested=true;void loadStravaActivities()};
     const stravaSyncButton=btn('stravaSyncButton');
     const stravaSyncStatus=btn('stravaSyncStatus');
     let stravaSyncRequest=0;
@@ -541,6 +545,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(requestId!==stravaSyncRequest||auth.currentUser?.uid!==OWNER_UID)return;
         if(!response.ok)throw Error('HTTP '+response.status+': '+String(result.error||'Synchronizace selhala'));
         stravaSyncStatus.textContent='Synchronizace dokončena: '+result.imported+' aktivit, '+result.withHeartRate+' s tepovou křivkou'+(result.streamErrors?' ('+result.streamErrors+' chyb načtení tepu)':'')+'.';
+        stravaPublishRequested=true;
         await loadStravaActivities();
       }catch(err){
         if(requestId===stravaSyncRequest&&auth.currentUser?.uid===OWNER_UID)
