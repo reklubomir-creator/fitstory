@@ -109,7 +109,7 @@ function activityKind(a){
   if(/^(treadmill|run|walk|virtualrun|indoor run|indoor walk)$/i.test(raw))return 'Trénink';
   if(/^(weight training|strength training|weighttraining|strengthtraining|posilovani|silovy trenink)$/i.test(raw))return 'Posilování';
   if(/^(workout|training|trenink|cviceni)$/i.test(raw))return 'Trénink';
-  return raw||'Ostatní';
+  return ({WeightTraining:'Silový trénink',StrengthTraining:'Silový trénink',Walk:'Chůze',Run:'Běh',Ride:'Cyklistika',Hike:'Turistika',Workout:'Trénink'})[raw]||raw||'Ostatní';
 }
 function activityDistanceMeters(a){
   const recorded=Number(a.distanceMeters);
@@ -179,7 +179,7 @@ const czechExerciseNames={
 function czechWorkoutDescription(description){
   return String(description||'').split('\n').map(line=>{
     const title=line.trim();
-    if(czechExerciseNames[title])return czechExerciseNames[title];
+    if(czechExerciseNames[title])return title+' ('+czechExerciseNames[title]+')';
     return line.replace(/^Set\s+(\d+)\s*:/i,'Série $1:').replace(/\b(\d+(?:[.,]\d+)?)\s*reps?\b/gi,'$1 opakování');
   }).join('\n');
 }
