@@ -613,7 +613,24 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       stravaRefreshList.disabled=false;
       stravaPublishRequested=true;
       void loadStravaActivities();
-      stravaSyncStatus.textContent="Připraveno k synchronizaci aktivit ze Stravy.";
+      stravaSyncStatus.textContent='Kontroluji datum poslední synchronizace Stravy…';
+      // Automatically refresh on admin sign-in if the last successful sync is older than 6 hours.
+      // The server-side sync endpoint is owner-authenticated and imports only recent activities.
+      void (async()=>{
+        try{
+          const statusSnapshot=await get(ref(db,'users/'+OWNER_UID+'/stravaSyncStatus'));
+          if(auth.currentUser?.uid!==OWNER_UID)return;
+          const last=Date.parse(String(statusSnapshot.val()?.lastSyncAt||''));
+          if(!Number.isFinite(last)||Date.now()-last>=6*60*60*1000){
+            stravaSyncStatus.textContent='Automaticky aktualizuji Stravu (posledních 30 aktivit)…';
+            stravaSyncButton.click();
+          }else{
+            stravaSyncStatus.textContent='Strava je aktuální. Poslední synchronizace: '+new Date(last).toLocaleString('cs-CZ')+'.';
+          }
+        }catch(err){
+          if(auth.currentUser?.uid===OWNER_UID)stravaSyncStatus.textContent='Automatická kontrola Stravy se nezdařila: '+err.message+'. Ruční synchronizace je dostupná.';
+        }
+      })();
       stravaConnectStatus.textContent="Připraveno k propojení Stravy.";
       stravaTestStatus.textContent='Připraveno k ověření přístupu.';
       btn('cloudPassword').value='';
