@@ -270,6 +270,50 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           table.appendChild(tr);
         }
         output.appendChild(table);
+        const chartTitle=document.createElement('h3');
+        chartTitle.textContent='Vývoj nejvyšší pracovní váhy';
+        chartTitle.style.margin='18px 0 8px';
+        output.appendChild(chartTitle);
+        const svgNS='http://www.w3.org/2000/svg';
+        const svg=document.createElementNS(svgNS,'svg');
+        svg.setAttribute('viewBox','0 0 700 260');
+        svg.setAttribute('role','img');
+        svg.setAttribute('aria-label','Vývoj pracovní váhy v kilogram ech podle data tréninku'.replace('kilogram ech','kilogramech'));
+        svg.style.cssText='display:block;width:100%;height:auto;max-width:850px';
+        const margin={left:56,right:24,top:24,bottom:44};
+        const chartW=700-margin.left-margin.right,chartH=260-margin.top-margin.bottom;
+        const values=items.map(x=>x.max);
+        const low=Math.max(0,Math.floor((Math.min(...values)-5)/5)*5);
+        const high=Math.ceil((Math.max(...values)+5)/5)*5;
+        const range=Math.max(1,high-low);
+        const timestamps=items.map(x=>Date.parse(x.day+'T12:00:00Z'));
+        const minTime=Math.min(...timestamps),maxTime=Math.max(...timestamps);
+        const x=i=>margin.left+(maxTime===minTime?(items.length===1?chartW/2:i*chartW/Math.max(1,items.length-1)):(timestamps[i]-minTime)/(maxTime-minTime)*chartW);
+        const y=v=>margin.top+(high-v)/range*chartH;
+        const add=(tag,attrs,textValue)=>{
+          const node=document.createElementNS(svgNS,tag);
+          for(const [k,v] of Object.entries(attrs))node.setAttribute(k,String(v));
+          if(textValue!==undefined)node.textContent=String(textValue);
+          svg.appendChild(node);return node;
+        };
+        for(let tick=0;tick<=4;tick++){
+          const value=low+range*tick/4,py=y(value);
+          add('line',{x1:margin.left,y1:py,x2:700-margin.right,y2:py,stroke:'currentColor','stroke-opacity':'.16'});
+          add('text',{x:margin.left-9,y:py+4,'text-anchor':'end',fill:'currentColor','font-size':12},fmt(value));
+        }
+        add('text',{x:margin.left,y:248,fill:'currentColor','font-size':12},items[0].day);
+        add('text',{x:700-margin.right,y:248,'text-anchor':'end',fill:'currentColor','font-size':12},items[items.length-1].day);
+        add('polyline',{points:items.map((e,i)=>x(i).toFixed(1)+','+y(e.max).toFixed(1)).join(' '),fill:'none',stroke:'#b4ed63','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
+        for(let i=0;i<items.length;i++){
+          const point=add('circle',{cx:x(i),cy:y(items[i].max),r:4,fill:'#b4ed63',stroke:'#17231b','stroke-width':1});
+          const tooltip=document.createElementNS(svgNS,'title');
+          tooltip.textContent=items[i].day+': '+fmt(items[i].max)+' kg; '+items[i].sets.length+' sérií';
+          point.appendChild(tooltip);
+        }
+        output.appendChild(svg);
+        const chartNote=document.createElement('p');chartNote.className='muted tiny';
+        chartNote.textContent='Každý bod představuje jeden zaznamenaný trénink. Osa Y: nejvyšší pracovní váha (kg).';
+        output.appendChild(chartNote);
         const note=document.createElement('p');note.className='muted tiny';
         note.textContent='Rozdíl nejvyšší váhy: '+(last.max-first.max>=0?'+':'')+fmt(last.max-first.max)+' kg. Deload se vynechává jen při výslovném označení v názvu nebo popisu aktivity.';
         output.appendChild(note);
