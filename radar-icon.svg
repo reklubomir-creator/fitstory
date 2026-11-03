@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+<title>RADAR HUBEŇOUR</title>
+<rect width="256" height="256" rx="48" fill="#07120b"/>
+<circle cx="128" cy="128" r="111" fill="#0a2411" stroke="#91ff24" stroke-width="11"/>
+<circle cx="128" cy="128" r="82" fill="none" stroke="#25b741" stroke-width="4" opacity=".8"/>
+<circle cx="128" cy="128" r="52" fill="none" stroke="#25b741" stroke-width="3" opacity=".6"/>
+<path d="M128 18v55M18 128h55M183 128h55" stroke="#54e84d" stroke-width="4" opacity=".8"/>
+<path d="M128 128 199 51 A103 103 0 0 1 229 128Z" fill="#7dff24" opacity=".25"/>
+<path d="M49 107q-9-14-4-25l12-19 17 8-8 19 15 8 15-17q12-12 25-12h14q13 0 25 12l15 17 15-8-8-19 17-8 12 19q5 11-4 25l-25 19q-12 8-23-1l-12-10v34H89v-34l-12 10q-11 9-23 1Z" fill="#f3fff2" stroke="#07120b" stroke-width="5" stroke-linejoin="round"/>
+<circle cx="128" cy="62" r="20" fill="#f3fff2" stroke="#07120b" stroke-width="5"/>
+<rect x="38" y="147" width="180" height="43" rx="12" fill="#101d12" stroke="#91ff24" stroke-width="5"/>
+<text x="128" y="177" text-anchor="middle" font-family="Arial,sans-serif" font-size="39" font-weight="900" fill="#f5fff2">RADAR</text>
+<path d="M84 207h88" stroke="#91ff24" stroke-width="8" stroke-linecap="round"/>
+<path d="m157 195 17 12-17 12" fill="none" stroke="#91ff24" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
