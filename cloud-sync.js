@@ -223,70 +223,58 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     };
     const exerciseLabel=name=>name+(exerciseCzech[name]?' ('+exerciseCzech[name]+')':'');
     function renderExerciseComparison(activities){
-      const first=document.getElementById('exerciseCompareA');
-      const second=document.getElementById('exerciseCompareB');
+      const select=document.getElementById('exerciseCompareA');
       const output=document.getElementById('exerciseCompareResult');
-      if(!first||!second||!output)return;
+      if(!select||!output)return;
       const records=new Map();
       for(const a of activities){
+        // Deload is excluded only when explicitly labeled, not inferred from lighter loads.
+        if(/\bdeload\b|odlehčovac[íi]|odlehčen[ýy]/i.test(String(a.name||'')+' '+String(a.description||'')))continue;
         const day=String(a.startDate||'').slice(0,10);
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(day))continue;
         for(const exercise of parseHevyDescription(a.description).exercises){
-          const weights=exercise.sets.map(set=>{
+          const sets=exercise.sets.map(set=>{
             const m=set.match(/:\s*([\d.,]+)\s*kg\s*x\s*(\d+)/i);
             return m?{kg:Number(m[1].replace(',','.')),reps:Number(m[2])}:null;
-          }).filter(Boolean);
-          if(!weights.length)continue;
+          }).filter(x=>x&&Number.isFinite(x.kg)&&Number.isFinite(x.reps));
+          if(!sets.length)continue;
           if(!records.has(exercise.name))records.set(exercise.name,[]);
-          records.get(exercise.name).push({day,kg:Math.max(...weights.map(x=>x.kg)),volume:weights.reduce((sum,x)=>sum+x.kg*x.reps,0),sets:weights.length});
+          records.get(exercise.name).push({day,id:String(a.id||''),sets,max:Math.max(...sets.map(x=>x.kg)),volume:sets.reduce((sum,x)=>sum+x.kg*x.reps,0)});
         }
       }
       const names=[...records.keys()].sort((a,b)=>a.localeCompare(b,'cs'));
-      const oldA=first.value,oldB=second.value;
-      for(const select of [first,second]){
-        select.replaceChildren();
-        for(const name of names){
-          const opt=document.createElement('option');opt.value=name;opt.textContent=exerciseLabel(name);select.appendChild(opt);
-        }
+      const old=select.value;
+      select.replaceChildren();
+      for(const name of names){
+        const option=document.createElement('option');
+        option.value=name;option.textContent=exerciseLabel(name);select.appendChild(option);
       }
-      first.value=names.includes(oldA)?oldA:names[0]||'';
-      second.value=names.includes(oldB)?oldB:names[1]||names[0]||'';
+      if(names.includes(old))select.value=old;
       const fmt=n=>n.toLocaleString('cs-CZ',{maximumFractionDigits:1});
       const draw=()=>{
         output.replaceChildren();
-        if(!names.length){output.textContent='Zatím nejsou dostupné série s váhou a opakováními.';return;}
-        const table=document.createElement('table');
-        table.style.width='100%';
-        const head=document.createElement('tr');
-        for(const title of ['Ukazatel',exerciseLabel(first.value),exerciseLabel(second.value)]){
-          const th=document.createElement('th');th.textContent=title;head.appendChild(th);
-        }
-        table.appendChild(head);
-        const stats=name=>{
-          const entries=records.get(name)||[];
-          return {
-            count:entries.length,
-            max:Math.max(0,...entries.map(e=>e.kg)),
-            latest:entries.slice().sort((a,b)=>b.day.localeCompare(a.day))[0],
-            bestVolume:Math.max(0,...entries.map(e=>e.volume))
-          };
-        };
-        const a=stats(first.value),b=stats(second.value);
-        for(const [label,one,two] of [
-          ['Počet tréninků',String(a.count),String(b.count)],
-          ['Nejvyšší pracovní váha',fmt(a.max)+' kg',fmt(b.max)+' kg'],
-          ['Poslední pracovní maximum',a.latest?fmt(a.latest.kg)+' kg ('+a.latest.day+')':'—',b.latest?fmt(b.latest.kg)+' kg ('+b.latest.day+')':'—'],
-          ['Nejvyšší objem v jednom tréninku',fmt(a.bestVolume)+' kg',fmt(b.bestVolume)+' kg']
+        const items=(records.get(select.value)||[]).sort((a,b)=>a.day.localeCompare(b.day)||a.id.localeCompare(b.id));
+        if(!items.length){output.textContent='Pro tento cvik nejsou dostupné záznamy s váhou a opakováními.';return;}
+        if(items.length<2){output.textContent='Zatím je dostupný jen jeden trénink tohoto cviku ('+items[0].day+'). Pro porovnání jsou potřeba alespoň dva.';return;}
+        const first=items[0],last=items[items.length-1];
+        const table=document.createElement('table');table.style.width='100%';
+        for(const values of [
+          ['Ukazatel','První: '+first.day,'Poslední: '+last.day],
+          ['Nejvyšší pracovní váha',fmt(first.max)+' kg',fmt(last.max)+' kg'],
+          ['Série',String(first.sets.length),String(last.sets.length)],
+          ['Objem (kg × opakování)',fmt(first.volume)+' kg',fmt(last.volume)+' kg'],
+          ['Série a opakování',first.sets.map(x=>fmt(x.kg)+' kg × '+x.reps).join('; '),last.sets.map(x=>fmt(x.kg)+' kg × '+x.reps).join('; ')]
         ]){
           const tr=document.createElement('tr');
-          for(const value of [label,one,two]){const td=document.createElement('td');td.textContent=value;td.style.padding='8px';tr.appendChild(td);}
+          for(const value of values){const td=document.createElement('td');td.textContent=value;td.style.padding='8px';td.style.verticalAlign='top';tr.appendChild(td);}
           table.appendChild(tr);
         }
         output.appendChild(table);
         const note=document.createElement('p');note.className='muted tiny';
-        note.textContent='Objem = součet váha × opakování v rámci cviku. Různé cviky a stroje nejsou přímo výkonově srovnatelné.';
+        note.textContent='Rozdíl nejvyšší váhy: '+(last.max-first.max>=0?'+':'')+fmt(last.max-first.max)+' kg. Deload se vynechává jen při výslovném označení v názvu nebo popisu aktivity.';
         output.appendChild(note);
       };
-      first.onchange=draw;second.onchange=draw;draw();
+      select.onchange=draw;draw();
     }
     async function loadStravaActivities(){
       const requestId=++stravaListRequest;
