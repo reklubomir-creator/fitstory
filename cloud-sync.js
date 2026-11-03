@@ -270,7 +270,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
               name.style.cssText='vertical-align:top;padding:7px 10px 7px 0;font-weight:600';
               const sets=document.createElement('td');
               sets.style.cssText='padding:7px 0;white-space:pre-line';
-              sets.textContent=exercise.sets.join('\\n');
+              sets.textContent=exercise.sets.join('\n');
               row.append(name,sets);body.appendChild(row);
             }
             table.appendChild(body);panel.appendChild(table);
