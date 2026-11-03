@@ -1,0 +1,17 @@
+{
+  "name": "RADAR HUBEŇOUR",
+  "short_name": "RADAR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080b0a",
+  "theme_color": "#92ff24",
+  "icons": [
+    {
+      "src": "./radar-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
