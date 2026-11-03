@@ -167,7 +167,33 @@ function activityDistanceMeters(a){
 window.radarPublicExerciseList=function(){return (Array.isArray(data.activities)?data.activities:[]).filter(a=>typeof a.date==='string'&&a.date>='2026-05-25').map(a=>({date:a.date,name:String(a.name||'Aktivita').slice(0,150),type:activityKind(a),minutes:Math.max(0,Math.round((Number(a.movingSeconds??a.elapsedSeconds)||0)/60)),distanceKm:activityDistanceMeters(a)==null?null:Math.round(activityDistanceMeters(a)/10)/100,avgHeartRate:Number.isFinite(Number(a.avgHeartRate))&&a.avgHeartRate!==null?Number(a.avgHeartRate):null,maxHeartRate:Number.isFinite(Number(a.maxHeartRate))&&a.maxHeartRate!==null?Number(a.maxHeartRate):null,calories:Number.isFinite(Number(a.calories))&&a.calories!==null?Number(a.calories):null,sets:Number.isFinite(Number(a.sets))&&a.sets!==null?Number(a.sets):null,reps:Number.isFinite(Number(a.reps))&&a.reps!==null?Number(a.reps):null,description:String(a.description||'').slice(0,2500),heartRate:a.heartRate?.points?.length?{points:a.heartRate.points.length>200?a.heartRate.points.filter((_,i)=>i%Math.ceil(a.heartRate.points.length/200)===0):a.heartRate.points,min:a.heartRate.min,avg:a.heartRate.avg,max:a.heartRate.max,duration:a.heartRate.duration}:null})).sort((a,b)=>b.date.localeCompare(a.date))};
 window.radarPublicExerciseStats=function(){const a=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');return {count:a.length,distanceKm:Math.round(a.reduce((sum,x)=>sum+(activityDistanceMeters(x)||0),0)/100)/10,hours:Math.round(a.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/360)/10}};
 function renderStrava(){
-  const all=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
+  const legacy=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
+  // API records are the read-only source of truth for the owner view.
+  // Keep legacy activities untouched for backup and historical heart-rate fallback.
+  const api=Array.isArray(window.radarApiActivities)?window.radarApiActivities:[];
+  const all=api.length?api.map(a=>{
+    const date=String(a.startDate||'').slice(0,10);
+    const original=legacy.find(b=>String(b.id)===String(a.id));
+    const time=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
+    const points=[];
+    if(Array.isArray(time)&&Array.isArray(bpm)){
+      const count=Math.min(time.length,bpm.length),step=Math.max(1,Math.ceil(count/360));
+      for(let i=0;i<count;i+=step){
+        const t=Number(time[i]),v=Number(bpm[i]);
+        if(Number.isFinite(t)&&Number.isFinite(v)&&t>=0&&v>=30&&v<=240)points.push([t,v]);
+      }
+    }
+    const heartRate=points.length>1?{points,min:Math.min(...points.map(p=>p[1])),avg:a.averageHeartrate??null,max:a.maxHeartrate??null}:original?.heartRate||null;
+    return {
+      id:String(a.id),date,name:String(a.name||a.sportType||a.type||'Aktivita'),
+      type:String(a.sportType||a.type||'Aktivita'),
+      movingSeconds:Number(a.movingTime)||0,elapsedSeconds:Number(a.elapsedTime)||0,
+      distanceMeters:Number(a.distance)||0,
+      avgHeartRate:a.averageHeartrate??null,maxHeartRate:a.maxHeartrate??null,
+      calories:a.calories??null,description:String(a.description||''),
+      heartRate,source:'Strava API'
+    };
+  }).filter(a=>/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&a.date>='2026-05-25'):legacy;
   const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
   if(!yearSelect||!typeSelect)return;
   const selectedYear=yearSelect.value,selectedType=typeSelect.value;
@@ -211,7 +237,7 @@ function renderStrava(){
       '<td>'+(activityDistanceMeters(a)==null?'—':fmt(activityDistanceMeters(a)/1000,2))+'</td>'+
       '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
       '<td>'+(a.calories==null?'—':fmt(a.calories,0))+'</td>'+
-      '<td><button class="delete" data-strava-del="'+id+'">Smazat</button></td></tr>'+
+      '<td>'+(api.length?'Strava API':'<button class="delete" data-strava-del="'+id+'">Smazat</button>')+'</td></tr>'+
       '<tr class="activity-detail" data-detail-for="'+id+'" style="display:none"><td colspan="8">'+details+'</td></tr>';
   }).join('');
 }
