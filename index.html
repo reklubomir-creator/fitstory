@@ -332,7 +332,12 @@ window.radarPublicRender=function(snapshot){
       const volume=item.sets.reduce((sum,x)=>sum+x.kg*x.reps,0);
       return escapeHtml(formatDateCZ(item.date))+': '+item.sets.length+' sérií · maximum '+fmt(max,1)+' kg · objem '+fmt(volume,1)+' kg';
     };
-    result.innerHTML='<p><strong>První záznam:</strong> '+formatSession(sessions[0])+'</p><p><strong>Poslední záznam:</strong> '+formatSession(sessions[sessions.length-1])+'</p><p class="tiny muted">Porovnání vychází ze zveřejněných sérií Hevy.</p>';
+    const values=sessions.map(x=>Math.max(...x.sets.map(set=>set.kg)));
+    const min=Math.min(...values),max=Math.max(...values),range=max-min||1;
+    const dots=values.map((v,i)=>({x:20+(i/(values.length-1||1))*320,y:105-(v-min)/range*80}));
+    const path=dots.map((p,i)=>(i?'L':'M')+p.x.toFixed(1)+' '+p.y.toFixed(1)).join(' ');
+    const chart='<svg viewBox="0 0 360 130" role="img" aria-label="Vývoj maximální pracovní váhy v kilogramech" style="width:100%;max-height:180px;margin:12px 0"><path d="'+path+'" fill="none" stroke="#b4ed63" stroke-width="3"/>'+dots.map(p=>'<circle cx="'+p.x+'" cy="'+p.y+'" r="3.5" fill="#b4ed63"/>').join('')+'<text x="20" y="124" font-size="11" fill="#c8d9c7">'+fmt(min,1)+' kg</text><text x="340" y="14" text-anchor="end" font-size="11" fill="#c8d9c7">'+fmt(max,1)+' kg</text></svg>';
+    result.innerHTML='<p><strong>První záznam:</strong> '+formatSession(sessions[0])+'</p><p><strong>Poslední záznam:</strong> '+formatSession(sessions[sessions.length-1])+'</p>'+chart+'<p class="tiny muted">Vývoj maximální pracovní váhy. Porovnání vychází ze zveřejněných sérií Hevy.</p>';
   };
   compareSelect.onchange=renderPublicCompare;
   renderPublicCompare();
