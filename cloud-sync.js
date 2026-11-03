@@ -322,7 +322,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         for(let i=0;i<items.length;i++){
           const point=add('circle',{cx:x(i),cy:y(items[i].max),r:4,fill:'#b4ed63',stroke:'#17231b','stroke-width':1});
           const tooltip=document.createElementNS(svgNS,'title');
-          tooltip.textContent=fmtDate(items[i].day)+': +fmt(items[i].max)+' kg; '+items[i].sets.length+' sérií';
+          tooltip.textContent=fmtDate(items[i].day)+': '+fmt(items[i].max)+' kg; '+items[i].sets.length+' sérií';
           point.appendChild(tooltip);
         }
         output.appendChild(svg);
