@@ -206,7 +206,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     const stravaListStatus=btn('stravaListStatus');
     const stravaActivityList=btn('stravaActivityList');
     let stravaListRequest=0;
-    let stravaPublishRequested=false;
+    let stravaPublishRequested=true;
     let stravaPage=0;
     function parseHevyDescription(raw){
       const clean=String(raw||'').replace(/&#x20;|&#32;|&nbsp;/gi,' ').replace(/&amp;/gi,'&').replace(/\r/g,'');
@@ -376,12 +376,12 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       if(auth.currentUser?.uid!==OWNER_UID)return;
       const list=activities.map(publicStravaActivity).filter(Boolean);
       if(!list.length)return;
-      const snapshot=await get(publicRef);
-      const current=snapshot.val();
-      if(!current||!Array.isArray(current.weights))throw Error('Veřejný přehled nemá platná data; publikace Stravy byla bezpečně zastavena.');
-      // Preserve existing weights, legacy exercise list, and all unrelated public fields.
-      // Never publish private route geometry, location coordinates, or raw Strava descriptions.
-      await set(publicRef,{...current,stravaExerciseList:list,stravaExerciseUpdatedAt:new Date().toISOString()});
+      const weightsSnapshot=await get(ref(db,'public/radar/weights'));
+      if(!Array.isArray(weightsSnapshot.val()))throw Error('Veřejný přehled nemá platná data hmotnosti; publikace Stravy byla bezpečně zastavena.');
+      // Write only the Strava branch: never rewrite weights or legacy workouts.
+      // No route geometry, GPS coordinates or unfiltered private descriptions.
+      await set(ref(db,'public/radar/stravaExerciseList'),list);
+      await set(ref(db,'public/radar/stravaExerciseUpdatedAt'),new Date().toISOString());
     }
     async function loadStravaActivities(){
       const requestId=++stravaListRequest;
@@ -594,6 +594,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       stravaConnectButton.disabled=false;
       stravaSyncButton.disabled=false;
       stravaRefreshList.disabled=false;
+      stravaPublishRequested=true;
       void loadStravaActivities();
       stravaSyncStatus.textContent="Připraveno k synchronizaci aktivit ze Stravy.";
       stravaConnectStatus.textContent="Připraveno k propojení Stravy.";
