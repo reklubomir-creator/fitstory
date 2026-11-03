@@ -300,7 +300,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         svg.setAttribute('viewBox','0 0 700 260');
         svg.setAttribute('role','img');
         svg.setAttribute('aria-label','Vývoj pracovní váhy v kilogram ech podle data tréninku'.replace('kilogram ech','kilogramech'));
-        svg.style.cssText='display:block;width:100%;height:auto;max-width:850px';
+        svg.style.cssText='display:block;width:100%;height:auto;max-width:760px';
         const margin={left:56,right:24,top:24,bottom:44};
         const chartW=700-margin.left-margin.right,chartH=260-margin.top-margin.bottom;
         const values=items.map(x=>x.max);
@@ -339,7 +339,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         }
         const tip=document.createElement('div');
         tip.style.cssText='display:none;position:absolute;pointer-events:none;background:#17231b;color:white;border:1px solid #b4ed63;border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap;z-index:2';
-        const wrap=document.createElement('div');wrap.style.position='relative';
+        const wrap=document.createElement('div');wrap.style.cssText='position:relative;max-width:760px';
         wrap.appendChild(svg);wrap.appendChild(tip);
         svg.querySelectorAll('circle').forEach((point,i)=>{
           const show=()=>{
