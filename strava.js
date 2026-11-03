@@ -166,6 +166,23 @@ function activityDistanceMeters(a){
 }
 window.radarPublicExerciseList=function(){return (Array.isArray(data.activities)?data.activities:[]).filter(a=>typeof a.date==='string'&&a.date>='2026-05-25').map(a=>({date:a.date,name:String(a.name||'Aktivita').slice(0,150),type:activityKind(a),minutes:Math.max(0,Math.round((Number(a.movingSeconds??a.elapsedSeconds)||0)/60)),distanceKm:activityDistanceMeters(a)==null?null:Math.round(activityDistanceMeters(a)/10)/100,avgHeartRate:Number.isFinite(Number(a.avgHeartRate))&&a.avgHeartRate!==null?Number(a.avgHeartRate):null,maxHeartRate:Number.isFinite(Number(a.maxHeartRate))&&a.maxHeartRate!==null?Number(a.maxHeartRate):null,calories:Number.isFinite(Number(a.calories))&&a.calories!==null?Number(a.calories):null,sets:Number.isFinite(Number(a.sets))&&a.sets!==null?Number(a.sets):null,reps:Number.isFinite(Number(a.reps))&&a.reps!==null?Number(a.reps):null,description:String(a.description||'').slice(0,2500),heartRate:a.heartRate?.points?.length?{points:a.heartRate.points.length>200?a.heartRate.points.filter((_,i)=>i%Math.ceil(a.heartRate.points.length/200)===0):a.heartRate.points,min:a.heartRate.min,avg:a.heartRate.avg,max:a.heartRate.max,duration:a.heartRate.duration}:null})).sort((a,b)=>b.date.localeCompare(a.date))};
 window.radarPublicExerciseStats=function(){const a=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');return {count:a.length,distanceKm:Math.round(a.reduce((sum,x)=>sum+(activityDistanceMeters(x)||0),0)/100)/10,hours:Math.round(a.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/360)/10}};
+const czechExerciseNames={
+  'Treadmill':'Běžecký pás','Shrug (Dumbbell)':'Krčení ramen s jednoručkami',
+  'Step Up':'Výstupy na stupínek','Standing Calf Raise':'Výpony na lýtka ve stoje',
+  'Chest Fly (Machine)':'Rozpažování na stroji','Lat Pulldown (Cable)':'Stahování horní kladky',
+  'Bicep Curl (Cable)':'Bicepsový zdvih na kladce','Shoulder Press (Dumbbell)':'Tlaky na ramena s jednoručkami',
+  'Romanian Deadlift (Dumbbell)':'Rumunský mrtvý tah s jednoručkami',
+  'Incline Bench Press (Dumbbell)':'Tlaky s jednoručkami na šikmé lavici',
+  'Lateral Raise (Dumbbell)':'Upažování s jednoručkami','Dumbbell Row':'Přítahy jednoručky',
+  'Triceps Extension (Cable)':'Tricepsové extenze na kladce'
+};
+function czechWorkoutDescription(description){
+  return String(description||'').split('\n').map(line=>{
+    const title=line.trim();
+    if(czechExerciseNames[title])return czechExerciseNames[title];
+    return line.replace(/^Set\s+(\d+)\s*:/i,'Série $1:').replace(/\b(\d+(?:[.,]\d+)?)\s*reps?\b/gi,'$1 opakování');
+  }).join('\n');
+}
 function renderStrava(){
   const legacy=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
   // API records are the read-only source of truth for the owner view.
@@ -237,7 +254,7 @@ function renderStrava(){
     const hasHeart=!!(a.heartRate&&Array.isArray(a.heartRate.points)&&a.heartRate.points.length>=2);
     const heartIcon='<span class="hr-availability'+(hasHeart?'':' missing')+'" title="'+(hasHeart?'Graf tepu je k dispozici':'Graf tepu není k dispozici')+'" aria-label="'+(hasHeart?'Graf tepu je k dispozici':'Graf tepu není k dispozici')+'">♥</span>';
     const details='<div class="activity-detail-inner">'+stats+
-      (window.radarHeartChart?.(a.heartRate)||'')+(description?'<pre>'+escapeHtml(description)+'</pre>':'<p class="muted">K této aktivitě není v exportu Stravy uveden podrobný popis.</p>')+'</div>';
+      (window.radarHeartChart?.(a.heartRate)||'')+(description?'<pre>'+escapeHtml(czechWorkoutDescription(description))+'</pre>':'<p class="muted">K této aktivitě není v exportu Stravy uveden podrobný popis.</p>')+'</div>';
     return '<tr class="activity-row" data-activity-toggle="'+id+'">'+
       '<td>'+escapeHtml(formatDateCZ(a.date))+'</td>'+
       '<td><button type="button" class="activity-toggle" data-activity-button="'+id+'" aria-expanded="false">▸ '+heartIcon+escapeHtml(a.name)+'</button></td>'+
