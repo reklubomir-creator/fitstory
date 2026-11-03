@@ -246,14 +246,20 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(/\bdeload\b|odlehčovac[íi]|odlehčen[ýy]/i.test(String(a.name||'')+' '+String(a.description||'')))continue;
         const day=String(a.startDate||'').slice(0,10);
         if(!/^\d{4}-\d{2}-\d{2}$/.test(day))continue;
+        // Repeated Hevy exercise blocks in one activity belong to one session.
+        const sessionExercises=new Map();
         for(const exercise of parseHevyDescription(a.description).exercises){
           const sets=exercise.sets.map(set=>{
             const m=set.match(/:\s*([\d.,]+)\s*kg\s*x\s*(\d+)/i);
             return m?{kg:Number(m[1].replace(',','.')),reps:Number(m[2])}:null;
           }).filter(x=>x&&Number.isFinite(x.kg)&&Number.isFinite(x.reps));
           if(!sets.length)continue;
-          if(!records.has(exercise.name))records.set(exercise.name,[]);
-          records.get(exercise.name).push({day,id:String(a.id||''),sets,max:Math.max(...sets.map(x=>x.kg)),volume:sets.reduce((sum,x)=>sum+x.kg*x.reps,0)});
+          if(!sessionExercises.has(exercise.name))sessionExercises.set(exercise.name,[]);
+          sessionExercises.get(exercise.name).push(...sets);
+        }
+        for(const [name,sets] of sessionExercises){
+          if(!records.has(name))records.set(name,[]);
+          records.get(name).push({day,id:String(a.id||''),sets,max:Math.max(...sets.map(x=>x.kg)),volume:sets.reduce((sum,x)=>sum+x.kg*x.reps,0)});
         }
       }
       const names=[...records.keys()].sort((a,b)=>a.localeCompare(b,'cs'));
