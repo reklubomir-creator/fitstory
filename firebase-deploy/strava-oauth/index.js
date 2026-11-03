@@ -128,3 +128,99 @@ exports.stravaCallback=onRequest({
     return res.status(500).send("Propojeni se nepodarilo dokoncit.");
   }
 });
+
+/**
+ * Owner-only manual import. Activity data is stored privately, not published.
+ * Initial scope: newest 30 activities, and heart-rate streams when available.
+ */
+exports.stravaSync=onRequest({
+  ...options,secrets:[SECRET],timeoutSeconds:120
+},async(req,res)=>{
+  if(req.method!=="POST")return res.status(405).json({error:"Method not allowed"});
+  if(!(await owner(req,res)))return;
+  res.set("Cache-Control","no-store");
+  try{
+    const tokenRef=getDatabase().ref(TOKEN_PATH);
+    const saved=(await tokenRef.get()).val();
+    if(!saved?.refreshToken)return res.status(409).json({error:"Strava not connected"});
+    let accessToken=saved.accessToken;
+    if(!accessToken||!Number.isFinite(saved.expiresAt)||saved.expiresAt<Date.now()/1000+120){
+      const refresh=await fetch("https://www.strava.com/oauth/token",{
+        method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},
+        body:new URLSearchParams({
+          client_id:CLIENT_ID,client_secret:SECRET.value(),
+          grant_type:"refresh_token",refresh_token:saved.refreshToken
+        }),signal:AbortSignal.timeout(15000)
+      });
+      if(!refresh.ok){
+        console.error("Strava refresh failed",refresh.status);
+        return res.status(502).json({error:"Strava token refresh failed",status:refresh.status});
+      }
+      const refreshed=await refresh.json();
+      if(!refreshed.access_token||!refreshed.refresh_token||!Number.isFinite(refreshed.expires_at))
+        throw new Error("Invalid Strava refresh response");
+      accessToken=refreshed.access_token;
+      await tokenRef.update({
+        accessToken,refreshToken:refreshed.refresh_token,expiresAt:refreshed.expires_at
+      });
+    }
+    const api=async(url)=>{
+      const response=await fetch(url,{
+        headers:{Authorization:"Bearer "+accessToken},
+        signal:AbortSignal.timeout(15000)
+      });
+      if(!response.ok){
+        const error=new Error("Strava API HTTP "+response.status);
+        error.status=response.status;
+        throw error;
+      }
+      return response.json();
+    };
+    const activities=await api("https://www.strava.com/api/v3/athlete/activities?per_page=30&page=1");
+    if(!Array.isArray(activities))throw new Error("Invalid Strava activities response");
+    const ref=getDatabase().ref("users/"+OWNER_UID+"/stravaActivities");
+    let imported=0,withHeartRate=0,streamErrors=0;
+    for(const activity of activities){
+      if(!Number.isSafeInteger(activity.id)||activity.id<=0)continue;
+      const record={
+        id:activity.id,name:String(activity.name||""),
+        type:String(activity.type||""),sportType:String(activity.sport_type||""),
+        startDate:String(activity.start_date||""),
+        movingTime:Number(activity.moving_time)||0,
+        elapsedTime:Number(activity.elapsed_time)||0,
+        distance:Number(activity.distance)||0,
+        totalElevationGain:Number(activity.total_elevation_gain)||0,
+        averageHeartrate:Number.isFinite(activity.average_heartrate)?activity.average_heartrate:null,
+        maxHeartrate:Number.isFinite(activity.max_heartrate)?activity.max_heartrate:null,
+        hasHeartrate:Boolean(activity.has_heartrate),
+        importedAt:new Date().toISOString()
+      };
+      if(record.hasHeartrate){
+        try{
+          const streams=await api("https://www.strava.com/api/v3/activities/"+activity.id+
+            "/streams?keys=time,heartrate&key_by_type=true");
+          if(Array.isArray(streams?.heartrate?.data)&&Array.isArray(streams?.time?.data)){
+            const n=Math.min(streams.heartrate.data.length,streams.time.data.length,20000);
+            record.heartRateStream={
+              time:streams.time.data.slice(0,n),
+              bpm:streams.heartrate.data.slice(0,n)
+            };
+            withHeartRate++;
+          }
+        }catch(err){
+          streamErrors++;
+          console.warn("Strava HR stream unavailable",activity.id,err.status||"unknown");
+        }
+      }
+      await ref.child(String(activity.id)).update(record);
+      imported++;
+    }
+    await getDatabase().ref("users/"+OWNER_UID+"/stravaSyncStatus").set({
+      lastSyncAt:new Date().toISOString(),imported,withHeartRate,streamErrors
+    });
+    return res.status(200).json({success:true,imported,withHeartRate,streamErrors});
+  }catch(err){
+    console.error("Strava sync failed",err.status||err.message);
+    return res.status(502).json({error:"Strava sync failed",status:err.status||null});
+  }
+});
