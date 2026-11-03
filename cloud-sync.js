@@ -400,7 +400,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(stravaPublishRequested){
           stravaPublishRequested=false;
           void publishStravaExercises(activities).then(()=>{
-            stravaListStatus.textContent+=' · Do Cvičení zveřejněno '+activities.filter(a=>/^\\d{4}-\\d{2}-\\d{2}$/.test(String(a.startDate||'').slice(0,10))&&String(a.startDate).slice(0,10)>='2026-05-25').length+' aktivit.';
+            stravaListStatus.textContent+=' · Aktivity Stravy zveřejněny v Cvičení.';
           }).catch(publicError=>{
             console.warn('Zveřejnění souhrnu Stravy se nezdařilo:',publicError);
             stravaListStatus.textContent+=' · Zveřejnění selhalo: '+publicError.message;
