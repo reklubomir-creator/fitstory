@@ -193,6 +193,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     const stravaListStatus=btn('stravaListStatus');
     const stravaActivityList=btn('stravaActivityList');
     let stravaListRequest=0;
+    let stravaPage=0;
     async function loadStravaActivities(){
       const requestId=++stravaListRequest;
       const uid=auth.currentUser?.uid;
@@ -206,11 +207,14 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         const activities=Object.values(values).filter(x=>x&&typeof x==='object')
           .sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
         stravaActivityList.replaceChildren();
+        const pageSize=10;
+        const totalPages=Math.max(1,Math.ceil(activities.length/pageSize));
+        stravaPage=Math.min(stravaPage,totalPages-1);
         stravaListStatus.textContent=activities.length?
-          'Uloženo '+activities.length+' aktivit. Zobrazuji nejnovějších '+Math.min(activities.length,30)+'.':
+          'Uloženo '+activities.length+' aktivit · stránka '+(stravaPage+1)+' z '+totalPages+'.':
           'Zatím nejsou uložené žádné aktivity.';
         const dateFormat=new Intl.DateTimeFormat('cs-CZ',{dateStyle:'medium',timeStyle:'short'});
-        for(const a of activities.slice(0,30)){
+        for(const a of activities.slice(stravaPage*pageSize,(stravaPage+1)*pageSize)){
           const item=document.createElement('div');
           item.style.cssText='padding:10px 0;border-bottom:1px solid var(--line,#ddd)';
           const heading=document.createElement('strong');
@@ -288,6 +292,21 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           item.appendChild(toggle);
           item.appendChild(panel);
           stravaActivityList.appendChild(item);
+        }
+        if(totalPages>1){
+          const pagination=document.createElement('nav');
+          pagination.setAttribute('aria-label','Stránkování cvičení');
+          pagination.style.cssText='display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;margin:16px 0';
+          const prev=document.createElement('button');
+          prev.type='button';prev.textContent='← Předchozí';prev.disabled=stravaPage===0;
+          prev.onclick=()=>{stravaPage--;loadStravaActivities();};
+          const label=document.createElement('span');
+          label.textContent='Stránka '+(stravaPage+1)+' / '+totalPages;
+          const next=document.createElement('button');
+          next.type='button';next.textContent='Další →';next.disabled=stravaPage>=totalPages-1;
+          next.onclick=()=>{stravaPage++;loadStravaActivities();};
+          pagination.append(prev,label,next);
+          stravaActivityList.appendChild(pagination);
         }
       }catch(err){
         if(requestId===stravaListRequest&&auth.currentUser?.uid===OWNER_UID)
