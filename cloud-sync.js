@@ -395,6 +395,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         const values=snapshot.val()||{};
         const activities=Object.values(values).filter(x=>x&&typeof x==='object')
           .sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
+        window.radarApiActivities=activities;
+        document.dispatchEvent(new Event('radar:data-changed'));
         renderExerciseComparison(activities);
         // Avoid blocking login and list rendering with public database writes.
         if(stravaPublishRequested){
@@ -579,6 +581,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       ++stravaListRequest;
       stravaRefreshList.disabled=true;
       stravaActivityList.replaceChildren();
+      window.radarApiActivities=null;
+      document.dispatchEvent(new Event('radar:data-changed'));
       stravaListStatus.textContent='Přihlas se pro načtení aktivit.';
       stravaSyncButton.disabled=true;
       stravaSyncStatus.textContent="Pro synchronizaci se přihlas do administrace.";
