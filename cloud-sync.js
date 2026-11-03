@@ -27,7 +27,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       const weights=(Array.isArray(data.weights)?data.weights:[]).filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
       const activity=window.radarPublicExerciseStats?.()||{count:0,distanceKm:0,hours:0};
       const exerciseList=window.radarPublicExerciseList?.()||[];
-      await set(publicRef,{weights,activity,exerciseList,updatedAt:new Date().toISOString()});
+      await set(publicRef,{...(publicSnapshot||{}),weights,activity,exerciseList,updatedAt:new Date().toISOString()});
     }
     let user=null,active=false,unsubscribe=null,remoteExists=false,remoteVersion=null;
     let pending=false,writing=false,writeTimer=null;
@@ -321,6 +321,52 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       };
       select.onchange=draw;draw();
     }
+    function publicStravaActivity(a){
+      const date=String(a.startDate||'').slice(0,10);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<'2026-05-25')return null;
+      const parsed=parseHevyDescription(a.description);
+      const times=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
+      const points=[];
+      if(Array.isArray(times)&&Array.isArray(bpm)){
+        const count=Math.min(times.length,bpm.length);
+        const stride=Math.max(1,Math.ceil(count/300));
+        for(let i=0;i<count;i+=stride){
+          const t=Number(times[i]),v=Number(bpm[i]);
+          if(Number.isFinite(t)&&Number.isFinite(v)&&t>=0&&v>=30&&v<=240)points.push([t,v]);
+        }
+        if(count>1&&(count-1)%stride!==0){
+          const t=Number(times[count-1]),v=Number(bpm[count-1]);
+          if(Number.isFinite(t)&&Number.isFinite(v)&&t>=0&&v>=30&&v<=240)points.push([t,v]);
+        }
+      }
+      const rate=points.map(x=>x[1]);
+      const average=Number(a.averageHeartrate),maximum=Number(a.maxHeartrate);
+      const heartRate=points.length>1?{
+        points,min:Math.min(...rate),
+        avg:Number.isFinite(average)?average:rate.reduce((x,y)=>x+y,0)/rate.length,
+        max:Number.isFinite(maximum)?maximum:Math.max(...rate)
+      }:null;
+      return {
+        id:'strava-'+String(a.id||date+'-'+String(a.name||'')),
+        date,name:String(a.name||a.sportType||a.type||'Aktivita').slice(0,140),
+        type:String(a.sportType||a.type||'Aktivita').slice(0,80),
+        minutes:Math.round(Math.max(0,Number(a.movingTime)||0)/60),
+        distanceKm:Number(a.distance)>0?Number(a.distance)/1000:null,
+        avgHeartRate:Number.isFinite(average)?average:null,
+        maxHeartRate:Number.isFinite(maximum)?maximum:null,
+        description:parsed.exercises.map(e=>exerciseLabel(e.name)+'\n'+e.sets.join('\n')).join('\n\n').slice(0,12000),
+        heartRate
+      };
+    }
+    async function publishStravaExercises(activities){
+      if(auth.currentUser?.uid!==OWNER_UID)return;
+      const list=activities.map(publicStravaActivity).filter(Boolean);
+      if(!list.length)return;
+      const current=publicSnapshot||{};
+      // Preserve existing weights, legacy exercise list, and all unrelated public fields.
+      // Never publish private route geometry, location coordinates, or raw Strava descriptions.
+      await set(publicRef,{...current,stravaExerciseList:list,stravaExerciseUpdatedAt:new Date().toISOString()});
+    }
     async function loadStravaActivities(){
       const requestId=++stravaListRequest;
       const uid=auth.currentUser?.uid;
@@ -334,6 +380,11 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         const activities=Object.values(values).filter(x=>x&&typeof x==='object')
           .sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
         renderExerciseComparison(activities);
+        try{
+          await publishStravaExercises(activities);
+        }catch(publicError){
+          console.warn('Zveřejnění souhrnu Stravy se nezdařilo:',publicError);
+        }
         stravaActivityList.replaceChildren();
         const pageSize=10;
         const totalPages=Math.max(1,Math.ceil(activities.length/pageSize));
