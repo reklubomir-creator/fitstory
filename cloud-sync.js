@@ -112,6 +112,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       pending=true;setStatus('Ukládám změny…');
       clearTimeout(writeTimer);writeTimer=setTimeout(flush,800);
     };
+    window.radarLoginReady=true;
     const signInButton=btn('cloudSignIn');
     signInButton.onclick=async()=>{
       const email=btn('cloudEmail').value.trim(),password=btn('cloudPassword').value;
