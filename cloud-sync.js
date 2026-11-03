@@ -189,12 +189,45 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(requestId===stravaConnectRequest)stravaConnectButton.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
     };
+    const stravaSyncButton=btn('stravaSyncButton');
+    const stravaSyncStatus=btn('stravaSyncStatus');
+    let stravaSyncRequest=0;
+    stravaSyncButton.onclick=async()=>{
+      const currentUser=auth.currentUser;
+      if(!currentUser||currentUser.uid!==OWNER_UID){
+        stravaSyncStatus.textContent='Nejdřív se přihlas jako administrátor.';
+        return;
+      }
+      const requestId=++stravaSyncRequest;
+      stravaSyncButton.disabled=true;
+      stravaSyncStatus.textContent='Načítám posledních 30 aktivit ze Stravy…';
+      try{
+        const token=await currentUser.getIdToken();
+        if(requestId!==stravaSyncRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        const response=await fetch('https://europe-west1-radarfit-25e17.cloudfunctions.net/stravaSync',{
+          method:'POST',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},
+          body:'{}',cache:'no-store'
+        });
+        const result=await response.json();
+        if(requestId!==stravaSyncRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        if(!response.ok)throw Error('HTTP '+response.status+': '+String(result.error||'Synchronizace selhala'));
+        stravaSyncStatus.textContent='Synchronizace dokončena: '+result.imported+' aktivit, '+result.withHeartRate+' s tepovou křivkou'+(result.streamErrors?' ('+result.streamErrors+' chyb načtení tepu)':'')+'.';
+      }catch(err){
+        if(requestId===stravaSyncRequest&&auth.currentUser?.uid===OWNER_UID)
+          stravaSyncStatus.textContent='Synchronizace se nezdařila: '+err.message;
+      }finally{
+        if(requestId===stravaSyncRequest)stravaSyncButton.disabled=auth.currentUser?.uid!==OWNER_UID;
+      }
+    };
     btn('cloudSignOut').onclick=()=>signOut(auth);
     btn('cloudUpload').onclick=upload;
     btn('cloudDownload').onclick=download;
     onAuthStateChanged(auth,async u=>{
       ++stravaTestRequest;
       ++stravaConnectRequest;
+      ++stravaSyncRequest;
+      stravaSyncButton.disabled=true;
+      stravaSyncStatus.textContent="Pro synchronizaci se přihlas do administrace.";
       stravaConnectButton.disabled=true;
       stravaConnectStatus.textContent="Pro propojení se přihlas do administrace.";
       stravaTestButton.disabled=true;
@@ -207,6 +240,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       window.radarAdminSetOwner?.(true);
       stravaTestButton.disabled=false;
       stravaConnectButton.disabled=false;
+      stravaSyncButton.disabled=false;
+      stravaSyncStatus.textContent="Připraveno k synchronizaci aktivit ze Stravy.";
       stravaConnectStatus.textContent="Připraveno k propojení Stravy.";
       stravaTestStatus.textContent='Připraveno k ověření přístupu.';
       btn('cloudPassword').value='';
