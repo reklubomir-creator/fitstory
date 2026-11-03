@@ -317,13 +317,19 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           if(textValue!==undefined)node.textContent=String(textValue);
           svg.appendChild(node);return node;
         };
+        // Visible axes and readable ticks, matching the public progress chart.
+        add('line',{x1:margin.left,y1:margin.top,x2:margin.left,y2:260-margin.bottom,stroke:'currentColor','stroke-opacity':'.6'});
+        add('line',{x1:margin.left,y1:260-margin.bottom,x2:700-margin.right,y2:260-margin.bottom,stroke:'currentColor','stroke-opacity':'.6'});
         for(let tick=0;tick<=4;tick++){
           const value=low+range*tick/4,py=y(value);
           add('line',{x1:margin.left,y1:py,x2:700-margin.right,y2:py,stroke:'currentColor','stroke-opacity':'.16'});
           add('text',{x:margin.left-9,y:py+4,'text-anchor':'end',fill:'currentColor','font-size':12},fmt(value));
+          const fraction=tick/4;
+          const date=new Date(minTime+(maxTime-minTime)*fraction).toISOString().slice(0,10);
+          add('text',{x:margin.left+chartW*fraction,y:237,'text-anchor':'middle',fill:'currentColor','font-size':11},fmtDate(date));
         }
-        add('text',{x:margin.left,y:248,fill:'currentColor','font-size':12},fmtDate(items[0].day));
-        add('text',{x:700-margin.right,y:248,'text-anchor':'end',fill:'currentColor','font-size':12},fmtDate(items[items.length-1].day));
+        add('text',{x:14,y:16,fill:'currentColor','font-size':12},'kg');
+        add('text',{x:margin.left+chartW/2,y:255,'text-anchor':'middle',fill:'currentColor','font-size':12},'Datum tréninku');
         add('polyline',{points:items.map((e,i)=>x(i).toFixed(1)+','+y(e.max).toFixed(1)).join(' '),fill:'none',stroke:'#b4ed63','stroke-width':3,'stroke-linecap':'round','stroke-linejoin':'round'});
         for(let i=0;i<items.length;i++){
           const point=add('circle',{cx:x(i),cy:y(items[i].max),r:4,fill:'#b4ed63',stroke:'#17231b','stroke-width':1});
@@ -331,7 +337,27 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           tooltip.textContent=fmtDate(items[i].day)+': '+fmt(items[i].max)+' kg; '+items[i].sets.length+' sérií';
           point.appendChild(tooltip);
         }
-        output.appendChild(svg);
+        const tip=document.createElement('div');
+        tip.style.cssText='display:none;position:absolute;pointer-events:none;background:#17231b;color:white;border:1px solid #b4ed63;border-radius:8px;padding:6px 10px;font-size:13px;white-space:nowrap;z-index:2';
+        const wrap=document.createElement('div');wrap.style.position='relative';
+        wrap.appendChild(svg);wrap.appendChild(tip);
+        svg.querySelectorAll('circle').forEach((point,i)=>{
+          const show=()=>{
+            tip.textContent=fmtDate(items[i].day)+' · '+fmt(items[i].max)+' kg';
+            tip.style.left=Math.min(80,Math.max(3,x(i)/700*100))+'%';
+            tip.style.top=Math.max(0,y(items[i].max)/260*100-16)+'%';
+            tip.style.display='block';
+          };
+          point.setAttribute('tabindex','0');
+          point.setAttribute('role','button');
+          point.setAttribute('aria-label',fmtDate(items[i].day)+': '+fmt(items[i].max)+' kg');
+          point.style.cursor='pointer';
+          point.addEventListener('mouseenter',show);
+          point.addEventListener('focus',show);
+          point.addEventListener('mouseleave',()=>tip.style.display='none');
+          point.addEventListener('blur',()=>tip.style.display='none');
+        });
+        output.appendChild(wrap);
         const chartNote=document.createElement('p');chartNote.className='muted tiny';
         chartNote.textContent='Každý bod představuje jeden zaznamenaný trénink. Osa Y: nejvyšší pracovní váha (kg).';
         output.appendChild(chartNote);
