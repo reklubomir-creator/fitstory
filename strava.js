@@ -180,7 +180,7 @@ function renderStrava(){
     document.getElementById('stravaRows').innerHTML='<tr><td colspan="7">Načítám aktuální aktivity ze Stravy…</td></tr>';
     return;
   }
-  const all=api.length?api.map(a=>{
+  const all=Array.isArray(window.radarApiActivities)&&!document.body.classList.contains('guest')?api.map(a=>{
     const date=String(a.startDate||'').slice(0,10);
     const original=legacy.find(b=>String(b.id)===String(a.id));
     const time=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
@@ -246,7 +246,7 @@ function renderStrava(){
       '<td>'+(activityDistanceMeters(a)==null?'—':fmt(activityDistanceMeters(a)/1000,2))+'</td>'+
       '<td>'+(a.avgHeartRate==null?'—':fmt(a.avgHeartRate,0))+'</td>'+
 
-      '<td>'+(api.length?'Strava API':'<button class="delete" data-strava-del="'+id+'">Smazat</button>')+'</td></tr>'+
+      '<td>'+(Array.isArray(window.radarApiActivities)&&!document.body.classList.contains('guest')?'Strava API':'<button class="delete" data-strava-del="'+id+'">Smazat</button>')+'</td></tr>'+
       '<tr class="activity-detail" data-detail-for="'+id+'" style="display:none"><td colspan="7">'+details+'</td></tr>';
   }).join('');
 }
