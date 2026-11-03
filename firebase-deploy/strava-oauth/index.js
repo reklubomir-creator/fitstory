@@ -190,8 +190,71 @@ async function importStravaActivities(){
         }
       }catch(err){streamErrors++;console.warn("Strava HR stream unavailable",activity.id);}
     }
+    // Preserve historical descriptions and heart-rate streams when the API response omits them.
+    const previous=(await ref.child(String(activity.id)).get()).val()||{};
+    try{
+      if(!previous.description){
+        const detail=await api("https://www.strava.com/api/v3/activities/"+activity.id);
+        if(detail&&typeof detail.description==="string")record.description=detail.description.slice(0,12000);
+      }
+    }catch(err){console.warn("Strava activity description unavailable",activity.id);}
+    if(!record.description&&previous.description)record.description=previous.description;
+    if(!record.heartRateStream&&previous.heartRateStream)record.heartRateStream=previous.heartRateStream;
     await ref.child(String(activity.id)).update(record);
     imported++;
+  }
+  // Publish only sanitized exercise data; do not expose GPS tracks or private raw descriptions.
+  const publicRoot=getDatabase().ref("public/radar");
+  const weights=(await publicRoot.child("weights").get()).val();
+  if(Array.isArray(weights)){
+    const all=(await ref.get()).val()||{};
+    const oldPublic=(await publicRoot.child("stravaExerciseList").get()).val();
+    const oldById=new Map((Array.isArray(oldPublic)?oldPublic:[]).filter(Boolean).map(x=>[String(x.id),x]));
+    const list=Object.values(all).filter(a=>a&&String(a.startDate||"").slice(0,10)>="2026-05-25").map(a=>{
+      const id="strava-"+String(a.id);
+      const previous=oldById.get(id)||{};
+      const times=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
+      const points=[];
+      if(Array.isArray(times)&&Array.isArray(bpm)){
+        const count=Math.min(times.length,bpm.length),stride=Math.max(1,Math.ceil(count/120));
+        for(let i=0;i<count;i+=stride){
+          const t=Number(times[i]),v=Number(bpm[i]);
+          if(Number.isFinite(t)&&Number.isFinite(v)&&t>=0&&v>=30&&v<=240)points.push([t,v]);
+        }
+      }
+      const rate=points.map(x=>x[1]);
+      const avg=Number(a.averageHeartrate),max=Number(a.maxHeartrate);
+      const heartRate=points.length>1?{
+        points,min:Math.min(...rate),
+        avg:a.averageHeartrate!=null&&Number.isFinite(avg)?avg:rate.reduce((x,y)=>x+y,0)/rate.length,
+        max:a.maxHeartrate!=null&&Number.isFinite(max)?max:Math.max(...rate)
+      }:previous.heartRate||null;
+      const description=String(a.description||"").replace(/&#x20;|&#32;|&nbsp;/gi," ").replace(/&amp;/gi,"&");
+      const blocks=[];let current=null;
+      for(const line of description.split(/\r?\n/)){
+        const value=line.trim();
+        if(!value||/^Logged with hevyapp\.com/i.test(value))continue;
+        if(/^Set\s*\d+\s*:/i.test(value)){if(current)current.sets.push(value);}
+        else if(!/^https?:\/\//i.test(value)){current={name:value,sets:[]};blocks.push(current);}
+      }
+      const cleanDescription=blocks.filter(x=>x.sets.length).map(x=>x.name+"\n"+x.sets.join("\n")).join("\n\n").slice(0,12000);
+      return {
+        id,date:String(a.startDate).slice(0,10),
+        name:String(a.name||a.sportType||a.type||"Aktivita").slice(0,140),
+        type:String(a.sportType||a.type||"Aktivita").slice(0,80),
+        minutes:Math.round(Math.max(0,Number(a.movingTime)||0)/60),
+        distanceKm:Number(a.distance)>0?Number(a.distance)/1000:null,
+        avgHeartRate:a.averageHeartrate==null?null:avg,
+        maxHeartRate:a.maxHeartrate==null?null:max,
+        description:cleanDescription||previous.description||"",
+        heartRate
+      };
+    }).sort((a,b)=>b.date.localeCompare(a.date));
+    if(list.length)await publicRoot.update({
+      stravaExerciseList:list,stravaExerciseUpdatedAt:new Date().toISOString()
+    });
+  }else{
+    console.warn("Public Strava publish skipped: weights missing or invalid");
   }
   await getDatabase().ref("users/"+OWNER_UID+"/stravaSyncStatus").set({
     lastSyncAt:new Date().toISOString(),imported,withHeartRate,streamErrors,source:"firebase"
