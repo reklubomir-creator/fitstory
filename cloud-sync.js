@@ -458,6 +458,50 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           pre.textContent=records.length?records.map(fmtAudit).join('\n'):'Žádné záznamy';
           details.append(pre);auditHost.append(details);
         }
+        // v0.4.26: inspect field coverage and HR sampling without changing any records.
+        const missingFields={date:[],name:[],duration:[],distance:[],description:[],averageHeartRate:[],maxHeartRate:[]};
+        const lowerResolution=[],invalidStreams=[],differentNames=[],differentDates=[];
+        const num=v=>v==null||v===''?NaN:Number(v);
+        const hasValue=v=>v!=null&&String(v).trim()!=='';
+        for(const old of shared){
+          const api=stravaById.get(normalizeId(old.id));
+          if(!api)continue;
+          const id=normalizeId(old.id);
+          const oldDate=String(old.date||'').slice(0,10),apiDate=String(api.startDate||'').slice(0,10);
+          if(oldDate&&apiDate&&oldDate!==apiDate)differentDates.push(old);
+          if(hasValue(old.name)&&hasValue(api.name)&&String(old.name).trim()!==String(api.name).trim())differentNames.push(old);
+          if(oldDate&&!apiDate)missingFields.date.push(old);
+          if(hasValue(old.name)&&!hasValue(api.name))missingFields.name.push(old);
+          if(Number.isFinite(num(old.minutes))&&num(old.minutes)>0&&!(num(api.movingTime)>0))missingFields.duration.push(old);
+          if(num(old.distanceKm)>0&&!(num(api.distance)>0))missingFields.distance.push(old);
+          if(hasValue(old.description)&&!hasValue(api.description))missingFields.description.push(old);
+          if(Number.isFinite(num(old.avgHeartRate))&&!(num(api.averageHeartrate)>0))missingFields.averageHeartRate.push(old);
+          if(Number.isFinite(num(old.maxHeartRate))&&!(num(api.maxHeartrate)>0))missingFields.maxHeartRate.push(old);
+          const oldPoints=Array.isArray(old.heartRate?.points)?old.heartRate.points.length:0;
+          const time=api.heartRateStream?.time,bpm=api.heartRateStream?.bpm;
+          const newPoints=Array.isArray(time)&&Array.isArray(bpm)?Math.min(time.length,bpm.length):0;
+          if(oldPoints>1&&newPoints<oldPoints)lowerResolution.push({old,oldPoints,newPoints});
+          if(newPoints>0&&(!Array.isArray(time)||time.length!==bpm.length||time.some((v,i)=>!Number.isFinite(Number(v))||!Number.isFinite(Number(bpm[i])))))invalidStreams.push(old);
+        }
+        const fieldTitle=document.createElement('strong');fieldTitle.textContent='Kontrola úplnosti údajů – v0.4.26';auditHost.append(fieldTitle);
+        const fieldNote=document.createElement('p');fieldNote.className='muted tiny';
+        fieldNote.textContent='Porovnání pouze u '+shared.length+' shodných ID. Chybějící pole znamená, že starý archiv má hodnotu a API záznam ji nemá. Rozdílné názvy nemusí být chybou. Délka a vzdálenost jsou kontrolovány na přítomnost, nikoli přesnou rovnost.';
+        auditHost.append(fieldNote);
+        for(const [label,records] of [
+          ['Chybí datum',missingFields.date],['Chybí název',missingFields.name],
+          ['Chybí délka aktivity',missingFields.duration],['Chybí vzdálenost',missingFields.distance],
+          ['Chybí popis',missingFields.description],['Chybí průměrný tep',missingFields.averageHeartRate],
+          ['Chybí maximální tep',missingFields.maxHeartRate],
+          ['Neshodné datum',differentDates],['Odlišný název',differentNames],
+          ['API stream má méně bodů tepu než starý graf',lowerResolution],
+          ['Neplatné hodnoty v API streamu',invalidStreams]
+        ]){
+          const details=document.createElement('details');const summary=document.createElement('summary');
+          summary.textContent=label+' ('+records.length+')';details.append(summary);
+          const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:240px;overflow:auto';
+          pre.textContent=records.length?records.map(item=>item.old?fmtAudit(item.old)+' · starý '+item.oldPoints+' bodů, API '+item.newPoints+' bodů':fmtAudit(item)).join('\n'):'Žádné záznamy';
+          details.append(pre);auditHost.append(details);
+        }
         document.dispatchEvent(new Event('radar:data-changed'));
         renderExerciseComparison(activities);
         // Avoid blocking login and list rendering with public database writes.
