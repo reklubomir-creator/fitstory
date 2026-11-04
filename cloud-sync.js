@@ -278,7 +278,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         if(!items.length){output.textContent='Pro tento cvik nejsou dostupné záznamy s váhou a opakováními.';return;}
         if(items.length<2){output.textContent='Zatím je dostupný jen jeden trénink tohoto cviku ('+fmtDate(items[0].day)+'). Pro porovnání jsou potřeba alespoň dva.';return;}
         const first=items[0],last=items[items.length-1];
-        const table=document.createElement('table');table.style.width='100%';
+        const table=document.createElement('table');table.style.width='100%';table.classList.add('exercise-progress-table');
         for(const values of [
           ['Ukazatel','První: '+fmtDate(first.day),'Poslední: '+fmtDate(last.day)],
           ['Nejvyšší pracovní váha',fmt(first.max)+' kg',fmt(last.max)+' kg'],
@@ -479,7 +479,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
             heading.textContent='Cviky a série z Hevy ('+hevy.exercises.length+' položek)';
             panel.appendChild(heading);
             const table=document.createElement('table');
-            table.style.cssText='width:100%;margin:8px 0 14px;border-collapse:collapse';
+            table.style.cssText='width:100%;margin:8px 0 14px;border-collapse:collapse';table.classList.add('hevy-exercises-table');
             const body=document.createElement('tbody');
             for(const exercise of hevy.exercises){
               const row=document.createElement('tr');
