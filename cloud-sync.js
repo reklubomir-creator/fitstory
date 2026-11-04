@@ -502,6 +502,41 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           pre.textContent=records.length?records.map(item=>item.old?fmtAudit(item.old)+' · starý '+item.oldPoints+' bodů, API '+item.newPoints+' bodů':fmtAudit(item)).join('\n'):'Žádné záznamy';
           details.append(pre);auditHost.append(details);
         }
+        // Owner-initiated, non-destructive migration. Writes only missing descriptions.
+        const migrateBox=document.createElement('div');
+        migrateBox.style.cssText='margin:12px 0;padding:12px;border:1px solid var(--line,#666);border-radius:10px';
+        const migrateTitle=document.createElement('strong');migrateTitle.textContent='Trvalé doplnění popisů do Strava API – v0.4.27';
+        const migrateInfo=document.createElement('p');migrateInfo.className='muted tiny';
+        migrateInfo.textContent='Připraveno '+missingFields.description.length+' popisů. Ukládají se pouze prázdné popisy do soukromé databáze, původní archiv zůstane beze změny. Před zápisem se každá aktivita znovu ověří.';
+        const migrateButton=document.createElement('button');migrateButton.type='button';
+        migrateButton.textContent='Trvale doplnit '+missingFields.description.length+' popisů';
+        migrateButton.disabled=!missingFields.description.length;
+        const migrateStatus=document.createElement('p');migrateStatus.className='muted tiny';
+        migrateButton.onclick=async()=>{
+          if(auth.currentUser?.uid!==OWNER_UID)return;
+          if(!confirm('Trvale doplnit až '+missingFields.description.length+' chybějících popisů do soukromého archivu Stravy? Původní archiv nebude změněn.'))return;
+          migrateButton.disabled=true;
+          let saved=0,skipped=0;const errors=[];
+          for(const old of missingFields.description){
+            if(auth.currentUser?.uid!==OWNER_UID){errors.push('Přihlášení se změnilo');break}
+            const id=normalizeId(old.id);
+            const recordRef=ref(db,'users/'+OWNER_UID+'/stravaActivities/'+id);
+            try{
+              const snap=await get(recordRef);
+              const current=snap.val();
+              if(!current||String(current.id??'')!==id||hasValue(current.description)){skipped++;continue}
+              const description=String(old.description||'');
+              if(!description.trim()){skipped++;continue}
+              // Field-level update: preserves heart-rate streams and every other activity field.
+              await update(recordRef,{description});
+              saved++;
+            }catch(err){errors.push(id+': '+err.message)}
+          }
+          migrateStatus.textContent='Doplněno: '+saved+' · přeskočeno: '+skipped+' · chyby: '+errors.length+(errors.length?' ('+errors.slice(0,3).join('; ')+')':'')+'. Obnovuji kontrolu…';
+          await loadStravaActivities();
+        };
+        migrateBox.append(migrateTitle,migrateInfo,migrateButton,migrateStatus);
+        auditHost.append(migrateBox);
         document.dispatchEvent(new Event('radar:data-changed'));
         renderExerciseComparison(activities);
         // Avoid blocking login and list rendering with public database writes.
