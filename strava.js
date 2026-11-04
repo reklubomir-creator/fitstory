@@ -45,7 +45,7 @@ function parseActivities(text){
   const out=[];let skipped=0;let beforeDiet=0;
   for(const row of rows){
     const id=get(row,'ID aktivity','Activity ID').trim(),date=day(get(row,'Datum aktivity','Activity Date'));
-    if(!id||!date){skipped++;continue}if(date<'2026-05-25'){beforeDiet++;continue}
+    if(!id||!date){skipped++;continue}if(date<'2026-05-24'){beforeDiet++;continue}
     const distanceMeters=n(get(row,'Vzdálenost','Distance',1));
     const distanceKm=n(get(row,'Vzdálenost','Distance',0));
     const meters=distanceMeters!==null?distanceMeters:(distanceKm===null?null:distanceKm*1000);
@@ -164,8 +164,8 @@ function activityDistanceMeters(a){
   }
   return found.length?Math.max(...found):(a.distanceMeters==null?null:recorded);
 }
-window.radarPublicExerciseList=function(){return (Array.isArray(data.activities)?data.activities:[]).filter(a=>typeof a.date==='string'&&a.date>='2026-05-25').map(a=>({date:a.date,name:String(a.name||'Aktivita').slice(0,150),type:activityKind(a),minutes:Math.max(0,Math.round((Number(a.movingSeconds??a.elapsedSeconds)||0)/60)),distanceKm:activityDistanceMeters(a)==null?null:Math.round(activityDistanceMeters(a)/10)/100,avgHeartRate:Number.isFinite(Number(a.avgHeartRate))&&a.avgHeartRate!==null?Number(a.avgHeartRate):null,maxHeartRate:Number.isFinite(Number(a.maxHeartRate))&&a.maxHeartRate!==null?Number(a.maxHeartRate):null,calories:Number.isFinite(Number(a.calories))&&a.calories!==null?Number(a.calories):null,sets:Number.isFinite(Number(a.sets))&&a.sets!==null?Number(a.sets):null,reps:Number.isFinite(Number(a.reps))&&a.reps!==null?Number(a.reps):null,description:String(a.description||'').slice(0,2500),heartRate:a.heartRate?.points?.length?{points:a.heartRate.points.length>200?a.heartRate.points.filter((_,i)=>i%Math.ceil(a.heartRate.points.length/200)===0):a.heartRate.points,min:a.heartRate.min,avg:a.heartRate.avg,max:a.heartRate.max,duration:a.heartRate.duration}:null})).sort((a,b)=>b.date.localeCompare(a.date))};
-window.radarPublicExerciseStats=function(){const a=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');return {count:a.length,distanceKm:Math.round(a.reduce((sum,x)=>sum+(activityDistanceMeters(x)||0),0)/100)/10,hours:Math.round(a.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/360)/10}};
+window.radarPublicExerciseList=function(){return (Array.isArray(data.activities)?data.activities:[]).filter(a=>typeof a.date==='string'&&a.date>='2026-05-24').map(a=>({date:a.date,name:String(a.name||'Aktivita').slice(0,150),type:activityKind(a),minutes:Math.max(0,Math.round((Number(a.movingSeconds??a.elapsedSeconds)||0)/60)),distanceKm:activityDistanceMeters(a)==null?null:Math.round(activityDistanceMeters(a)/10)/100,avgHeartRate:Number.isFinite(Number(a.avgHeartRate))&&a.avgHeartRate!==null?Number(a.avgHeartRate):null,maxHeartRate:Number.isFinite(Number(a.maxHeartRate))&&a.maxHeartRate!==null?Number(a.maxHeartRate):null,calories:Number.isFinite(Number(a.calories))&&a.calories!==null?Number(a.calories):null,sets:Number.isFinite(Number(a.sets))&&a.sets!==null?Number(a.sets):null,reps:Number.isFinite(Number(a.reps))&&a.reps!==null?Number(a.reps):null,description:String(a.description||'').slice(0,2500),heartRate:a.heartRate?.points?.length?{points:a.heartRate.points.length>200?a.heartRate.points.filter((_,i)=>i%Math.ceil(a.heartRate.points.length/200)===0):a.heartRate.points,min:a.heartRate.min,avg:a.heartRate.avg,max:a.heartRate.max,duration:a.heartRate.duration}:null})).sort((a,b)=>b.date.localeCompare(a.date))};
+window.radarPublicExerciseStats=function(){const a=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-24');return {count:a.length,distanceKm:Math.round(a.reduce((sum,x)=>sum+(activityDistanceMeters(x)||0),0)/100)/10,hours:Math.round(a.reduce((sum,x)=>sum+(Number(x.movingSeconds??x.elapsedSeconds)||0),0)/360)/10}};
 const czechExerciseNames={
   'Treadmill':'Běžecký pás','Shrug (Dumbbell)':'Krčení ramen s jednoručkami',
   'Step Up':'Výstupy na stupínek','Standing Calf Raise':'Výpony na lýtka ve stoje',
@@ -184,7 +184,7 @@ function czechWorkoutDescription(description){
   }).join('\n');
 }
 function renderStrava(){
-  const legacy=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-25');
+  const legacy=(Array.isArray(data.activities)?data.activities:[]).filter(x=>typeof x.date==='string'&&x.date>='2026-05-24');
   // API records are the read-only source of truth for the owner view.
   // Keep legacy activities untouched for backup and historical heart-rate fallback.
   const api=Array.isArray(window.radarApiActivities)?window.radarApiActivities:[];
@@ -219,7 +219,7 @@ function renderStrava(){
       calories:a.calories??null,description:String(a.description||''),
       heartRate,source:'Strava API'
     };
-  }).filter(a=>/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&a.date>='2026-05-25'):legacy;
+  }).filter(a=>/^\d{4}-\d{2}-\d{2}$/.test(a.date)&&a.date>='2026-05-24'):legacy;
   const yearSelect=document.getElementById('stravaYear'),typeSelect=document.getElementById('stravaType');
   if(!yearSelect||!typeSelect)return;
   const selectedMonth=yearSelect.value,selectedType=typeSelect.value;
@@ -300,7 +300,7 @@ document.getElementById('stravaLoad').addEventListener('click',async()=>{
     }
     try{save()}catch(e){data.activities.splice(data.activities.length-incoming.length,incoming.length);for(const [a,old] of enriched){if(old===undefined)delete a.sourceFile;else a.sourceFile=old}throw Error('Úložiště prohlížeče je plné. Exportuj zálohu a zkus import znovu.')}
     renderStrava();
-    status.textContent='Hotovo: přidáno '+incoming.length+' aktivit, propojeno '+enriched.length+' názvů souborů od 25. 5. 2026, přeskočeno '+(parsed.out.length-incoming.length)+' již uložených nebo opakovaných, '+parsed.beforeDiet+' starších aktivit'+(parsed.skipped?', neplatných řádků: '+parsed.skipped:'')+'.';
+    status.textContent='Hotovo: přidáno '+incoming.length+' aktivit, propojeno '+enriched.length+' názvů souborů od 24. 5. 2026, přeskočeno '+(parsed.out.length-incoming.length)+' již uložených nebo opakovaných, '+parsed.beforeDiet+' starších aktivit'+(parsed.skipped?', neplatných řádků: '+parsed.skipped:'')+'.';
   }catch(e){status.textContent='Import se nezdařil: '+e.message}
 });
 document.addEventListener('click',e=>{
