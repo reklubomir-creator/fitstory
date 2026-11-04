@@ -210,7 +210,7 @@ async function importStravaActivities(){
     const all=(await ref.get()).val()||{};
     const oldPublic=(await publicRoot.child("stravaExerciseList").get()).val();
     const oldById=new Map((Array.isArray(oldPublic)?oldPublic:[]).filter(Boolean).map(x=>[String(x.id),x]));
-    const list=Object.values(all).filter(a=>a&&String(a.startDate||"").slice(0,10)>="2026-05-25").map(a=>{
+    const list=Object.values(all).filter(a=>a&&String(a.startDate||"").slice(0,10)>="2026-05-24").map(a=>{
       const id="strava-"+String(a.id);
       const previous=oldById.get(id)||{};
       const times=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
