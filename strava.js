@@ -75,6 +75,8 @@ function formatDuration(seconds){
 }
 function activityKind(a){
   const raw=String(a.type||'').trim();
+  // Explicit outdoor walking must not be grouped with treadmill training.
+  if(/^(walk|walking)$/i.test(raw))return 'Chůze';
   const name=String(a.name||'');
   const description=String(a.description||'');
   const normalize=v=>String(v).toLocaleLowerCase('cs').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -199,7 +201,6 @@ function renderStrava(){
   }
   const all=Array.isArray(window.radarApiActivities)&&!document.body.classList.contains('guest')?api.map(a=>{
     const date=String(a.startDate||'').slice(0,10);
-    const original=legacy.find(b=>String(b.id)===String(a.id));
     const time=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
     const points=[];
     if(Array.isArray(time)&&Array.isArray(bpm)){
@@ -209,7 +210,7 @@ function renderStrava(){
         if(Number.isFinite(t)&&Number.isFinite(v)&&t>=0&&v>=30&&v<=240)points.push([t,v]);
       }
     }
-    const heartRate=points.length>1?{points,min:Math.min(...points.map(p=>p[1])),avg:a.averageHeartrate??null,max:a.maxHeartrate??null}:original?.heartRate||null;
+    const heartRate=points.length>1?{points,min:Math.min(...points.map(p=>p[1])),avg:a.averageHeartrate??null,max:a.maxHeartrate??null}:null;
     return {
       id:String(a.id),date,name:String(a.name||a.sportType||a.type||'Aktivita'),
       type:String(a.sportType||a.type||'Aktivita'),
