@@ -444,12 +444,12 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         const shared=legacy.filter(a=>newIds.has(normalizeId(a.id)));
         const withLegacyHeart=legacy.filter(a=>Array.isArray(a.heartRate?.points)&&a.heartRate.points.length>1);
         const stravaById=new Map(activities.map(a=>[normalizeId(a.id),a]));
-        const heartOnlyInLegacy=shared.filter(a=>a.heartRate?.points?.length>1&&!(stravaById.get(normalizeId(a.id))?.heartRate?.points?.length>1));
+        const heartOnlyInLegacy=shared.filter(a=>a.heartRate?.points?.length>1&&!(stravaById.get(normalizeId(a.id))?.heartRateStream?.bpm?.length>1));
         const fmtAudit=a=>String(a.date||a.startDate||'')+' · '+String(a.name||'Aktivita')+' · ID '+String(a.id??'chybí');
         auditHost.replaceChildren();
         const auditTitle=document.createElement('strong');auditTitle.textContent='Kontrola archivů – pouze čtení';auditHost.append(auditTitle);
         const auditSummary=document.createElement('p');auditSummary.className='muted tiny';
-        auditSummary.textContent='Původní archiv: '+legacy.length+' · Strava API: '+activities.length+' · Shodná ID: '+shared.length+' · Jen původní: '+legacyOnly.length+' · Jen Strava: '+stravaOnly.length+' · Grafy tepu jen v původním archivu u shodných ID: '+heartOnlyInLegacy.length+' (celkem ve starém archivu: '+withLegacyHeart.length+').';
+        auditSummary.textContent='Původní archiv: '+legacy.length+' · Strava API: '+activities.length+' · Shodná ID: '+shared.length+' · Jen původní: '+legacyOnly.length+' · Jen Strava: '+stravaOnly.length+' · Grafy tepu pouze ve starém archivu (bez API streamu) u shodných ID: '+heartOnlyInLegacy.length+' (celkem ve starém archivu: '+withLegacyHeart.length+').';
         auditHost.append(auditSummary);
         for(const [heading,records] of [['Pouze v původním archivu',legacyOnly],['Pouze ve Stravě',stravaOnly],['Graf tepu chybí ve Stravě',heartOnlyInLegacy]]){
           const details=document.createElement('details');const summary=document.createElement('summary');
