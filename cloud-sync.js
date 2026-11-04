@@ -287,7 +287,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           ['Série a opakování',first.sets.map(x=>fmt(x.kg)+' kg × '+x.reps).join('; '),last.sets.map(x=>fmt(x.kg)+' kg × '+x.reps).join('; ')]
         ]){
           const tr=document.createElement('tr');
-          for(const value of values){const td=document.createElement('td');td.textContent=value;td.style.padding='8px';td.style.verticalAlign='top';tr.appendChild(td);}
+          for(let j=0;j<values.length;j++){const td=document.createElement('td');td.textContent=j===0?values[j]:(values[0]==='Ukazatel'?values[j]:(j===1?'První ('+fmtDate(first.day)+'): ':'Poslední ('+fmtDate(last.day)+'): ')+values[j]);td.style.padding='8px';td.style.verticalAlign='top';tr.appendChild(td);}
           table.appendChild(tr);
         }
         output.appendChild(table);
