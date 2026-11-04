@@ -15,7 +15,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
   try{
     const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
     const {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
-    const {getDatabase,ref,get,onValue,set,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js');
+    const {getDatabase,ref,get,onValue,set,update,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js');
     const app=initializeApp(config);
     const auth=getAuth(app),db=getDatabase(app);
     const OWNER_UID='M8VZmCpDslf5lJiziK5fHAsXnFg1';
@@ -27,7 +27,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       const weights=(Array.isArray(data.weights)?data.weights:[]).filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
       const activity=window.radarPublicExerciseStats?.()||{count:0,distanceKm:0,hours:0};
       const exerciseList=window.radarPublicExerciseList?.()||[];
-      await set(publicRef,{...(publicSnapshot||{}),weights,activity,exerciseList,updatedAt:new Date().toISOString()});
+      // Atomic multi-location patch: do not overwrite Strava's separately maintained public branches.
+      await update(publicRef,{weights,activity,exerciseList,updatedAt:new Date().toISOString()});
     }
     let user=null,active=false,unsubscribe=null,remoteExists=false,remoteVersion=null;
     let pending=false,writing=false,writeTimer=null;
