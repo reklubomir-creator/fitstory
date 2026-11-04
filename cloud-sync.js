@@ -42,7 +42,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       if(!Array.isArray(incoming.weights)||!Array.isArray(incoming.activities))throw Error('Cloudová data nemají správný formát.');
       data=incoming;
       for(const field of ['weights','workouts','foods','activities','milestones','body','labs'])if(!Array.isArray(data[field]))data[field]=[];
-      data.activities=data.activities.filter(a=>typeof a.date==='string'&&a.date>='2026-05-25');
+      data.activities=data.activities.filter(a=>typeof a.date==='string'&&a.date>='2026-05-24');
       localStorage.setItem('radar-v1',JSON.stringify(data));
       localStorage.setItem(hashKey,currentHash());
       render();
@@ -369,7 +369,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     }
     function publicStravaActivity(a){
       const date=String(a.startDate||'').slice(0,10);
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<'2026-05-25')return null;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<'2026-05-24')return null;
       const parsed=parseHevyDescription(a.description);
       const times=a.heartRateStream?.time,bpm=a.heartRateStream?.bpm;
       const points=[];
