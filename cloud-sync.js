@@ -429,6 +429,35 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         const activities=Object.values(values).filter(x=>x&&typeof x==='object')
           .sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
         window.radarApiActivities=activities;
+        // Read-only audit of the legacy CSV archive against the private Strava API archive.
+        // Never merges, deletes or writes activity data.
+        const auditHost=btn('stravaActivityAudit')||document.createElement('div');
+        auditHost.id='stravaActivityAudit';
+        auditHost.style.cssText='margin:14px 0;padding:12px;border:1px solid var(--line,#666);border-radius:10px';
+        if(!auditHost.isConnected)stravaActivityList.parentNode.insertBefore(auditHost,stravaActivityList);
+        const legacy=Array.isArray(data.activities)?data.activities:[];
+        const normalizeId=value=>String(value??'').trim().replace(/^strava-/i,'');
+        const oldIds=new Set(legacy.map(a=>normalizeId(a.id)).filter(Boolean));
+        const newIds=new Set(activities.map(a=>normalizeId(a.id)).filter(Boolean));
+        const legacyOnly=legacy.filter(a=>!newIds.has(normalizeId(a.id)));
+        const stravaOnly=activities.filter(a=>!oldIds.has(normalizeId(a.id)));
+        const shared=legacy.filter(a=>newIds.has(normalizeId(a.id)));
+        const withLegacyHeart=legacy.filter(a=>Array.isArray(a.heartRate?.points)&&a.heartRate.points.length>1);
+        const stravaById=new Map(activities.map(a=>[normalizeId(a.id),a]));
+        const heartOnlyInLegacy=shared.filter(a=>a.heartRate?.points?.length>1&&!(stravaById.get(normalizeId(a.id))?.heartRate?.points?.length>1));
+        const fmtAudit=a=>String(a.date||a.startDate||'')+' · '+String(a.name||'Aktivita')+' · ID '+String(a.id??'chybí');
+        auditHost.replaceChildren();
+        const auditTitle=document.createElement('strong');auditTitle.textContent='Kontrola archivů – pouze čtení';auditHost.append(auditTitle);
+        const auditSummary=document.createElement('p');auditSummary.className='muted tiny';
+        auditSummary.textContent='Původní archiv: '+legacy.length+' · Strava API: '+activities.length+' · Shodná ID: '+shared.length+' · Jen původní: '+legacyOnly.length+' · Jen Strava: '+stravaOnly.length+' · Grafy tepu jen v původním archivu u shodných ID: '+heartOnlyInLegacy.length+' (celkem ve starém archivu: '+withLegacyHeart.length+').';
+        auditHost.append(auditSummary);
+        for(const [heading,records] of [['Pouze v původním archivu',legacyOnly],['Pouze ve Stravě',stravaOnly],['Graf tepu chybí ve Stravě',heartOnlyInLegacy]]){
+          const details=document.createElement('details');const summary=document.createElement('summary');
+          summary.textContent=heading+' ('+records.length+')';details.append(summary);
+          const pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:240px;overflow:auto';
+          pre.textContent=records.length?records.map(fmtAudit).join('\n'):'Žádné záznamy';
+          details.append(pre);auditHost.append(details);
+        }
         document.dispatchEvent(new Event('radar:data-changed'));
         renderExerciseComparison(activities);
         // Avoid blocking login and list rendering with public database writes.
