@@ -15,23 +15,51 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
   try{
     const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js');
     const {getAuth,onAuthStateChanged,signInWithEmailAndPassword,createUserWithEmailAndPassword,signOut}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js');
-    const {getDatabase,ref,get,onValue,set,update,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js');
+    const {getDatabase,ref,get,onValue,update,runTransaction,serverTimestamp}=await import('https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js');
     const app=initializeApp(config);
     const auth=getAuth(app),db=getDatabase(app);
     const OWNER_UID='M8VZmCpDslf5lJiziK5fHAsXnFg1';
     const publicRef=ref(db,'public/radar');
     let publicSnapshot=null;
     onValue(publicRef,snap=>{publicSnapshot=snap.val();window.radarPublicRender?.(publicSnapshot)},err=>{if(document.body.classList.contains('guest'))document.getElementById('progressText').textContent='Veřejná data nejsou dostupná: '+err.message});
+    const model=window.RadarSyncModel;
+    if(!model)throw Error('Chybí bezpečný synchronizační modul. Obnov stránku.');
+    const clone=x=>JSON.parse(JSON.stringify(x));
+    let baseData=null,ready=false,sessionUid=null,backupSequence=0;
+    async function backupSnapshot(uid,privateData,publicData,localData){
+      // A durable, device-local recovery point must succeed before any database write.
+      await new Promise((resolve,reject)=>{
+        const request=indexedDB.open('radar-recovery',1);
+        request.onupgradeneeded=()=>request.result.createObjectStore('snapshots');
+        request.onerror=()=>reject(request.error);
+        request.onsuccess=()=>{
+          const store=request.result,tx=store.transaction('snapshots','readwrite');
+          tx.objectStore('snapshots').put({uid,createdAt:new Date().toISOString(),privateData,publicData,localData},uid+':'+(sessionUid||'login')+':'+(++backupSequence));
+          tx.oncomplete=()=>{store.close();resolve()};
+          tx.onerror=()=>{store.close();reject(tx.error)};
+        };
+      });
+    }
     async function publishPublic(){
-      if(!user||user.uid!==OWNER_UID||!active)return;
-      const weights=(Array.isArray(data.weights)?data.weights:[]).filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
+      if(!user||user.uid!==OWNER_UID||!active||!ready||pending)return;
+      const uid=user.uid;
+      const authoritative=await get(dataRef());
+      if(user?.uid!==uid||!active||pending)return;
+      const privateData=model.normalize(authoritative.val()?.data);
+      const weights=privateData.weights.filter(w=>/^\d{4}-\d{2}-\d{2}$/.test(w.date)&&Number.isFinite(Number(w.kg))).map(w=>({date:w.date,kg:Number(w.kg)})).sort((a,b)=>a.date.localeCompare(b.date));
       const activity=window.radarPublicExerciseStats?.()||{count:0,distanceKm:0,hours:0};
       const exerciseList=window.radarPublicExerciseList?.()||[];
       // Atomic multi-location patch: do not overwrite Strava's separately maintained public branches.
-      await update(publicRef,{weights,activity,exerciseList,updatedAt:new Date().toISOString()});
+      const revision=Number(privateData._syncRevision)||0;
+      const result=await runTransaction(publicRef,current=>{
+        if(current===null)return null;
+        if((Number(current.weightsRevision)||0)>revision)return;
+        return {...current,weights,activity,exerciseList,weightsRevision:revision,updatedAt:new Date().toISOString()};
+      },{applyLocally:false});
+      if(!result.committed||!result.snapshot.exists())throw Error('Zveřejnění nebylo potvrzeno; může již existovat novější verze.');
     }
     let user=null,active=false,unsubscribe=null,remoteExists=false,remoteVersion=null;
-    let pending=false,writing=false,writeTimer=null;
+    let pending=false,writing=false,writeTimer=null,blocked=false;
     const fingerprint=value=>{let hash=2166136261;for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619)}return (hash>>>0).toString(16)};
     const localText=()=>JSON.stringify(data);
     const currentHash=()=>fingerprint(localText());
@@ -39,11 +67,8 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
     const dataRef=()=>ref(db,'users/'+user.uid+'/radar');
     function applyRemote(remote){
       if(!remote||!remote.data||typeof remote.data!=='object')return;
-      const incoming=remote.data;
-      if(!Array.isArray(incoming.weights)||!Array.isArray(incoming.activities))throw Error('Cloudová data nemají správný formát.');
-      data=incoming;
-      for(const field of ['weights','workouts','foods','activities','milestones','body','labs'])if(!Array.isArray(data[field]))data[field]=[];
-      data.activities=data.activities.filter(a=>typeof a.date==='string'&&a.date>='2026-05-24');
+      data=model.normalize(remote.data);
+      baseData=clone(data);
       localStorage.setItem('radar-v1',JSON.stringify(data));
       localStorage.setItem(hashKey,currentHash());
       render();
@@ -56,7 +81,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         remoteExists=!!remote;
         if(!remote||!remote.data)return;
         remoteVersion=remote.updatedAt||null;
-        if(pending||writing)return;
+        if(pending||writing||!ready)return;
         try{
           if(fingerprint(JSON.stringify(remote.data))!==currentHash()){
             applyRemote(remote);
@@ -67,7 +92,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       },err=>setStatus('Cloud není dostupný: '+err.message));
     }
     function connect(){
-      active=true;pending=false;
+      active=true;ready=true;blocked=false;
       localStorage.setItem(linkedKey,user.uid);
       localStorage.setItem(hashKey,currentHash());
       subscribe();
@@ -75,43 +100,68 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       setStatus('Synchronizace je aktivní. Změny se automaticky ukládají do cloudu.');
     }
     async function upload(){
-      if(!user)return;
-      if(remoteExists&&!confirm('Přepsat cloudová data daty z tohoto zařízení? Původní cloudový stav bude nahrazen.'))return;
-      try{
-        setStatus('Nahrávám data do cloudu…');
-        writing=true;
-        await set(dataRef(),{data:JSON.parse(localText()),updatedAt:serverTimestamp()});
-        writing=false;remoteExists=true;connect();
-        await publishPublic().catch(err=>setStatus('Soukromá data nahrána, ale zveřejnění selhalo: '+err.message));
-      }catch(err){writing=false;setStatus('Nahrání selhalo: '+err.message)}
+      if(!user||!ready)return;
+      // This button now retries a safe merge; it never replaces the cloud snapshot.
+      pending=true;blocked=false;await flush();
     }
     async function download(){
       if(!user)return;
-      if(!confirm('Nahradit data v tomto prohlížeči cloudovou verzí? Nejdřív si případně stáhni JSON zálohu.'))return;
       try{
-        const snap=await get(dataRef());
-        if(!snap.exists()||!snap.val().data){setStatus('V cloudu zatím žádná data nejsou. Nejdřív je nahraj z původního zařízení.');return}
-        applyRemote(snap.val());connect();
+        const uid=user.uid,snap=await get(dataRef()),pub=await get(publicRef);
+        if(user?.uid!==uid)return;
+        if(!snap.exists()||!snap.val().data)throw Error('V cloudu nejsou data. Místní záznamy byly ponechány.');
+        await backupSnapshot(uid,snap.val(),pub.val(),clone(data));
+        if(!confirm('Načíst cloudovou historii? Současná místní data zůstanou v obnovovací záloze tohoto prohlížeče.'))return;
+        pending=false;applyRemote(snap.val());connect();
       }catch(err){setStatus('Stažení selhalo: '+err.message)}
     }
     async function flush(){
-      if(!user||!active||!pending||writing)return;
+      if(!user||!active||!ready||!pending||writing||blocked)return;
       writing=true;
+      const uid=user.uid,local=clone(data),base=clone(baseData);
       try{
-        const payload=JSON.parse(localText());
-        const sentHash=fingerprint(JSON.stringify(payload));
-        await set(dataRef(),{data:payload,updatedAt:serverTimestamp()});
-        localStorage.setItem(hashKey,sentHash);
-        pending=currentHash()!==sentHash;
-        setStatus(pending?'Během ukládání přibyly změny; dokončuji synchronizaci…':'Všechny změny jsou synchronizované.');
-        if(!pending)await publishPublic().catch(err=>setStatus('Soukromá data uložena, ale veřejný přehled se neaktualizoval: '+err.message));
-      }catch(err){setStatus('Změny jsou uložené místně, cloud zatím ne: '+err.message)}
-      finally{writing=false;if(pending){clearTimeout(writeTimer);writeTimer=setTimeout(flush,2000)}}
+        const target=ref(db,'users/'+uid+'/radar/data');
+        const [snapshot,pub]=await Promise.all([get(dataRef()),get(publicRef)]);
+        await backupSnapshot(uid,snapshot.val(),pub.val(),local);
+        if(user?.uid!==uid||!active)return;
+        // Firebase retries this pure three-way merge against the latest server state.
+        // Never set() the entire radar object; concurrent additions remain in the result.
+        let conflict=null;
+        const result=await runTransaction(target,current=>{
+          if(current===null)return null; // An empty cache must reach the server and retry; never seed it with local history.
+          try{const merged=model.merge(current,base,local);merged._syncRevision=(Number(current._syncRevision)||0)+1;return merged}catch(err){conflict=err;return;}
+        },{applyLocally:false});
+        if(!result.committed)throw conflict||Error('Cloudový zápis nebyl potvrzen. Obnov data a zkus to znovu.');
+        const committed=model.normalize(result.snapshot.val());
+        const newer=JSON.stringify(data)!==JSON.stringify(local);
+        const next=newer?model.merge(committed,local,data):committed;
+        baseData=clone(committed);data=next;
+        localStorage.setItem('radar-v1',JSON.stringify(data));
+        localStorage.setItem(hashKey,fingerprint(JSON.stringify(committed)));
+        pending=newer;
+        render();document.dispatchEvent(new Event('radar:data-changed'));
+        if(!pending){
+          try{await publishPublic();setStatus('Soukromá historie uložena a veřejný přehled aktualizován.');}
+          catch(err){setStatus('Soukromá historie je bezpečně uložena. Zveřejnění SELHALO: '+err.message+'. Použij „Bezpečně uložit / zopakovat zveřejnění“ pro opakování.');}
+        }else setStatus('Dokončuji další místní změny…');
+      }catch(err){blocked=true;setStatus('Cloudový zápis zastaven; místní data i záloha zůstávají zachované: '+err.message);}
+      finally{writing=false;if(pending&&!blocked){clearTimeout(writeTimer);writeTimer=setTimeout(flush,1500)}}
     }
     window.radarCloudChanged=()=>{
-      if(!active||!user)return;
-      pending=true;setStatus('Ukládám změny…');
+      if(!active||!user||!ready){setStatus('Změna zůstala pouze místně. Cloudová historie ještě není načtená.');return;}
+      pending=true;blocked=false;setStatus('Ukládám změny…');
       clearTimeout(writeTimer);writeTimer=setTimeout(flush,800);
+    };
+    // Capture before existing form handlers so partial data cannot be edited during login.
+    document.addEventListener('submit',event=>{
+      if(user&&!ready){event.preventDefault();event.stopImmediatePropagation();setStatus('Nejdřív musí být bezpečně načtená cloudová historie.');}
+    },true);
+    document.addEventListener('click',event=>{
+      if(user&&!ready&&event.target.closest('[data-del],#importButton')){event.preventDefault();event.stopImmediatePropagation();setStatus('Počkej na načtení cloudové historie.');}
+    },true);
+    window.radarExportRecovery=async()=>{
+      const saved=await new Promise((resolve,reject)=>{const request=indexedDB.open('radar-recovery',1);request.onerror=()=>reject(request.error);request.onsuccess=()=>{const db=request.result,tx=db.transaction('snapshots','readonly'),read=tx.objectStore('snapshots').getAll();read.onsuccess=()=>resolve(read.result);read.onerror=()=>reject(read.error);tx.oncomplete=()=>db.close()}});
+      const url=URL.createObjectURL(new Blob([JSON.stringify(saved,null,2)],{type:'application/json'})),a=document.createElement('a');a.href=url;a.download='radar-obnovovaci-zalohy.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     };
     window.radarLoginReady=true;
     const signInButton=btn('cloudSignIn');
@@ -672,14 +722,15 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           pagination.append(prev,label,next);
           stravaActivityList.appendChild(pagination);
         }
+        return {success:true};
       }catch(err){
         if(requestId===stravaListRequest&&auth.currentUser?.uid===OWNER_UID){
-          window.radarApiActivities=[];
-          document.dispatchEvent(new Event('radar:data-changed'));
+          // Preserve the last successful list on transient refresh failures.
           stravaListStatus.textContent='Načtení aktivit selhalo: '+err.message;
           const rows=document.getElementById('stravaRows');
           if(rows)rows.innerHTML='<tr><td colspan="7">Načtení Stravy selhalo. Zkus obnovit seznam v administraci.</td></tr>';
         }
+        return {success:false,error:err.message};
       }finally{
         if(requestId===stravaListRequest)stravaRefreshList.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
@@ -706,13 +757,23 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         });
         const result=await response.json();
         if(requestId!==stravaSyncRequest||auth.currentUser?.uid!==OWNER_UID)return;
-        if(!response.ok)throw Error('HTTP '+response.status+': '+String(result.error||'Synchronizace selhala'));
+        if(!response.ok||result.success!==true)throw Error('HTTP '+response.status+': '+String(result.error||'Synchronizace nebyla potvrzena'));
+        const importSummary='Import Stravy dokončen: '+result.imported+' aktivit.';
         stravaSyncStatus.textContent='Synchronizace dokončena: '+result.imported+' aktivit, '+result.withHeartRate+' s tepovou křivkou'+(result.streamErrors?' ('+result.streamErrors+' chyb načtení tepu)':'')+'.';
+        if(result.published===false)stravaSyncStatus.textContent+=' Zveřejnění aktivit selhalo; soukromý import je uložen.';
         stravaPublishRequested=true;
-        await loadStravaActivities();
+        try{
+          const refresh=await loadStravaActivities();
+          if(refresh?.success===false)stravaSyncStatus.textContent=importSummary+' Obnovení seznamu selhalo: '+refresh.error;
+        }catch(refreshError){stravaSyncStatus.textContent=importSummary+' Obnovení seznamu selhalo: '+refreshError.message;}
       }catch(err){
-        if(requestId===stravaSyncRequest&&auth.currentUser?.uid===OWNER_UID)
-          stravaSyncStatus.textContent='Synchronizace se nezdařila: '+err.message;
+        if(requestId!==stravaSyncRequest||auth.currentUser?.uid!==OWNER_UID)return;
+        stravaSyncStatus.textContent='Výsledek importu se nepodařilo potvrdit: '+err.message+'. Kontroluji serverový stav…';
+        try{
+          const snap=await get(ref(db,'users/'+OWNER_UID+'/stravaSyncStatus'));
+          const state=snap.val();
+          if(state?.lastSyncAt)stravaSyncStatus.textContent+=' Poslední serverem potvrzený import: '+new Date(state.lastSyncAt).toLocaleString('cs-CZ')+'.';
+        }catch{}
       }finally{
         if(requestId===stravaSyncRequest)stravaSyncButton.disabled=auth.currentUser?.uid!==OWNER_UID;
       }
@@ -737,7 +798,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       stravaTestButton.disabled=true;
       stravaTestStatus.textContent='Pro test se přihlas do administrace.';
       if(unsubscribe){unsubscribe();unsubscribe=null}
-      user=u;active=false;pending=false;clearTimeout(writeTimer);
+      user=u;active=false;ready=false;baseData=null;pending=false;blocked=false;sessionUid=Date.now().toString();clearTimeout(writeTimer);
       login.hidden=!!u;logged.hidden=!u;
       if(!u){window.radarAdminSetOwner?.(false);setStatus('Veřejný přehled je dostupný bez přihlášení. Pro úpravy se přihlas.');return}
       if(u.uid!==OWNER_UID){window.radarAdminSetOwner?.(false);setStatus('Tento účet nemá oprávnění spravovat RADAR.');await signOut(auth);return}
@@ -746,26 +807,6 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       stravaConnectButton.disabled=false;
       stravaSyncButton.disabled=false;
       stravaRefreshList.disabled=false;
-      stravaPublishRequested=true;
-      void loadStravaActivities();
-      stravaSyncStatus.textContent='Kontroluji datum poslední synchronizace Stravy…';
-      // Automatically refresh on admin sign-in if the last successful sync is older than 6 hours.
-      // The server-side sync endpoint is owner-authenticated and imports only recent activities.
-      void (async()=>{
-        try{
-          const statusSnapshot=await get(ref(db,'users/'+OWNER_UID+'/stravaSyncStatus'));
-          if(auth.currentUser?.uid!==OWNER_UID)return;
-          const last=Date.parse(String(statusSnapshot.val()?.lastSyncAt||''));
-          if(!Number.isFinite(last)||Date.now()-last>=6*60*60*1000){
-            stravaSyncStatus.textContent='Automaticky aktualizuji Stravu (posledních 30 aktivit)…';
-            stravaSyncButton.click();
-          }else{
-            stravaSyncStatus.textContent='Strava je aktuální. Poslední synchronizace: '+new Date(last).toLocaleString('cs-CZ')+'.';
-          }
-        }catch(err){
-          if(auth.currentUser?.uid===OWNER_UID)stravaSyncStatus.textContent='Automatická kontrola Stravy se nezdařila: '+err.message+'. Ruční synchronizace je dostupná.';
-        }
-      })();
       stravaConnectStatus.textContent="Připraveno k propojení Stravy.";
       stravaTestStatus.textContent='Připraveno k ověření přístupu.';
       btn('cloudPassword').value='';
@@ -774,12 +815,36 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
       try{
         const snap=await get(dataRef());if(user?.uid!==u.uid)return;
         remoteExists=snap.exists()&&!!snap.val().data;
-        const hasLink=localStorage.getItem(linkedKey)===u.uid;
-        const unchanged=localStorage.getItem(hashKey)===currentHash();
-        if(hasLink&&unchanged&&remoteExists){
-          applyRemote(snap.val());connect();
+        const local=clone(data),remote=snap.val();
+        const pub=await get(publicRef);
+        await backupSnapshot(u.uid,remote,pub.val(),local);
+        if(user?.uid!==u.uid)return;
+        if(remoteExists){
+          const recovery=model.recoverWeights(remote.data,local);
+          applyRemote(remote);
+          data=recovery.data;
+          pending=JSON.stringify(data)!==JSON.stringify(baseData);
+          localStorage.setItem('radar-v1',JSON.stringify(data));
+          connect();render();
+          stravaPublishRequested=true;
+          void loadStravaActivities();
+          stravaSyncStatus.textContent='Kontroluji datum poslední synchronizace Stravy…';
+          // Login reads status only. The existing Firebase scheduler owns automatic imports.
+          void (async()=>{
+            try{
+              const statusSnapshot=await get(ref(db,'users/'+OWNER_UID+'/stravaSyncStatus'));
+              if(auth.currentUser?.uid!==OWNER_UID)return;
+              const last=Date.parse(String(statusSnapshot.val()?.lastSyncAt||''));
+              stravaSyncStatus.textContent=Number.isFinite(last)?'Poslední potvrzená synchronizace: '+new Date(last).toLocaleString('cs-CZ')+'.':'Zatím není zaznamenaná úspěšná synchronizace. Ruční synchronizace je dostupná.';
+            }catch(err){
+              if(auth.currentUser?.uid===OWNER_UID)stravaSyncStatus.textContent='Automatická kontrola Stravy se nezdařila: '+err.message+'. Ruční synchronizace je dostupná.';
+            }
+          })();
+
+          if(pending)void flush();
+          if(recovery.conflicts.length)setStatus('Cloudová historie načtena. Místní rozdíly pro '+recovery.conflicts.join(', ')+' zůstaly v obnovovací záloze; nebyly přepsány.');
         }else{
-          setStatus(remoteExists?'Cloudová data existují. Vyber, zda použít data z tohoto zařízení, nebo stáhnout cloudovou verzi.':'Cloud je prázdný. Na zařízení s původními daty zvol „Nahrát místní data do cloudu“.');
+          setStatus('Cloudová historie nebyla nalezena. Automatický zápis je zablokovaný, místní data zůstala zachovaná.');
         }
       }catch(err){setStatus('Nepodařilo se načíst cloud: '+err.message)}
     });
