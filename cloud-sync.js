@@ -447,7 +447,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
         id:'strava-'+String(a.id||date+'-'+String(a.name||'')),
         date,name:String(a.name||a.sportType||a.type||'Aktivita').slice(0,140),
         type:String(a.sportType||a.type||'Aktivita').slice(0,80),
-        minutes:Math.round(Math.max(0,Number(a.movingTime)||0)/60),
+        minutes:Math.max(0,Number(a.movingTime)||0)/60,
         distanceKm:Number(a.distance)>0?Number(a.distance)/1000:null,
         avgHeartRate:Number.isFinite(average)?average:null,
         maxHeartRate:Number.isFinite(maximum)?maximum:null,
@@ -619,7 +619,7 @@ if(!config||!config.apiKey||!config.databaseURL||!config.projectId){
           const detail=document.createElement('div');
           detail.className='muted tiny';
           const parts=[String(a.sportType||a.type||'Neurčeno')];
-          if(Number(a.movingTime)>0)parts.push('Čas '+Math.round(Number(a.movingTime)/60)+' min');
+          if(Number(a.movingTime)>0)parts.push('Čas '+((s)=>Math.floor(s/60)+':'+String(s%60).padStart(2,'0'))(Math.round(Number(a.movingTime))));
           if(Number(a.distance)>0)parts.push('Vzdálenost '+(Number(a.distance)/1000).toLocaleString('cs-CZ',{maximumFractionDigits:2})+' km');
           if(Number.isFinite(a.averageHeartrate))parts.push('Průměrný tep '+a.averageHeartrate+' bpm');
           if(Number.isFinite(a.maxHeartrate))parts.push('Max. tep '+a.maxHeartrate+' bpm');
